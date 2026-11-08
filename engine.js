@@ -1150,11 +1150,8 @@ function hrDaily(d, open, R) {
     const target = clamp(55 + pay + perks + ot + late + mgr + hr + (e.attMod || 0) + ((e.att == null ? 0.5 : e.att) - 0.5) * 20, 5, 100);
     e.morale = clamp(e.morale + (target - e.morale) * 0.04 + rnd(-0.6, 0.6), 0, 100);
     if (e.today) e.skill = Math.min(1.4, e.skill + 0.0012 * (e.learn || 1));
-    // resignation
-    if (e.status !== 'resigning' && e.morale < 40 + (e.amb || 1) * 5 && chance((45 - e.morale) * (e.amb || 1) / 2500)) {
-      e.status = 'resigning'; e.leaveOn = d + 30; queue({ type: 'resign', emp: e.id });
-    }
-    if (e.status === 'resigning' && d >= e.leaveOn) separate(e, 'resigned');
+    // resignation: life events, better offers, and unhappy staff
+    resignCheck(e, d);
     // theft by cash handlers
     if (open && e.today && ['cashier', 'server', 'clerk', 'driver', 'salesman', 'attendant', 'stocker'].includes(e.role) && e.hon < 0.3 && e.morale < 60 && chance(0.01)) {
       const amt = irnd(5, 40) * 100;

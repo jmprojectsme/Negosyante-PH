@@ -207,3 +207,66 @@ function approvalsMonthly(d) {
   if (monthOf(d) === 1) meritBatch(d);
   if (d - S.start > 20) priceReview(d);
 }
+
+// ---------- resignations: people leave good employers too ----------
+// Retail/food turnover in the PH runs about 20-40% a year. Most of it is life, not the boss.
+const RESIGN_REASONS = [
+  { k: 'offer', w: (e) => (e.rate < marketWage(e.role) ? 3 : 1.2) * (e.skill > 0.95 ? 1.5 : 1), counter: 0.6, line: (e, x) => `May offer po sa ibang ${pick(['kompanya', 'branch ng kalaban', 'store sa mall'])}: ${peso(x.offer)}/day. Gusto ko po sanang mag-stay, pero malaking tulong po sa pamilya.` },
+  { k: 'abroad', w: (e) => (e.age >= 23 && e.age <= 45 ? 1.4 : 0.2), counter: 0, line: () => `Natanggap na po ako bilang ${pick(['caregiver sa Japan', 'baker sa Dubai', 'factory worker sa Taiwan', 'service crew sa Saudi', 'housekeeping sa Qatar'])}. Lilipad na po ako sa susunod na buwan.` },
+  { k: 'school', w: (e) => (e.age < 26 ? 1.3 : 0.1), counter: 0, line: () => 'Babalik na po ako sa pag-aaral. Nakaipon na po ako para sa tuition.' },
+  { k: 'province', w: () => 1, counter: 0, line: () => pick(['Uuwi na po kami sa probinsya, doon na po kami titira.', 'Ikakasal na po ako at lilipat na po kami sa Cavite.', 'Lilipat na po kami ng bahay, malayo na po dito.']) },
+  { k: 'family', w: () => 0.7, counter: 0, line: () => pick(['May sakit po ang nanay ko, ako po ang mag-aalaga.', 'Wala na pong magbabantay sa mga anak ko.']) },
+  { k: 'bpo', w: (e) => (e.age < 32 ? 0.8 : 0.1), counter: 0.3, line: () => 'Natanggap po ako sa call center. Mas malaki po ang sweldo at may night differential.' },
+  { k: 'burnout', w: () => (S.policy.overtime ? 1.5 : 0), counter: 0.5, line: () => 'Pagod na pagod na po ako sa araw-araw na overtime.' }
+];
+function resignHazard(e, d) {
+  const base = e.age < 25 ? 0.32 : e.age < 35 ? 0.22 : e.age < 45 ? 0.13 : 0.08;
+  let m = 1;
+  if (e.rate < marketWage(e.role) * 0.97) m *= 1.6;
+  if (e.morale < 50) m *= 1.6; else if (e.morale > 75) m *= 0.65;
+  if (d - e.hired < 365) m *= 1.25;
+  if (S.policy.perks.hmo) m *= 0.85;
+  m *= (e.amb || 1);
+  return base * m / 365;
+}
+function resignCheck(e, d) {
+  if (e.status === 'resigning') { if (d >= e.leaveOn) separate(e, 'resigned'); return; }
+  if (!['regular', 'probi'].includes(e.status) || e.startOn > d || d - e.hired < 20) return;
+  if (S.cases.some((c) => c.emp === e.id && c.stage !== 'closed')) return;
+  let reason = null;
+  // unhappy people leave (as before)
+  if (e.morale < 40 + (e.amb || 1) * 5 && chance((45 - e.morale) * (e.amb || 1) / 2500)) reason = { k: 'unhappy', counter: 0.5, line: () => 'Salamat po sa lahat, pero hindi na po ako masaya dito.' };
+  else if (chance(resignHazard(e, d))) {
+    const opts = RESIGN_REASONS.map((r) => [r, r.w(e)]).filter((x) => x[1] > 0), tot = opts.reduce((s, x) => s + x[1], 0);
+    let t = Math.random() * tot; for (const [r, w] of opts) { t -= w; if (t <= 0) { reason = r; break; } }
+    reason = reason || opts[0][0];
+  }
+  if (!reason) return;
+  const x = { k: reason.k, counter: reason.counter };
+  if (reason.k === 'offer') x.offer = Math.round(Math.max(e.rate * rnd(1.1, 1.25), marketWage(e.role) * 1.05));
+  if (reason.k === 'bpo') x.offer = Math.round(Math.max(e.rate * 1.35, 900));
+  x.quote = reason.line(e, x);
+  e.status = 'resigning'; e.leaveOn = d + 30; e.resign = x; e.morale = clamp(e.morale - 5, 0, 100);
+  queue({ type: 'resign', emp: e.id });
+}
+// what HR says in the exit interview
+function exitAdvice(e) {
+  const x = e.resign || { k: 'unhappy', counter: 0.5 }, key = e.skill >= 0.95 || active().filter((y) => y.role === e.role).length <= 1;
+  if (!x.counter) return { text: `This is a personal decision, a counter-offer won't change it. HR recommends accepting, getting a proper turnover, and ${key ? 'opening a replacement now, since they are hard to replace' : 'deciding if we need a replacement'}.`, replace: true };
+  if (key) return { text: `${e.name} is a strong performer${active().filter((y) => y.role === e.role).length <= 1 ? ' and our only ' + roleDef(e.role).name.toLowerCase() : ''}. Hiring and training a replacement costs about a month of their salary. HR recommends a counter-offer.`, counter: true };
+  return { text: 'Average performer and we have others in the same role. HR recommends accepting the resignation and opening a replacement if the workload needs it.', replace: true };
+}
+function counterRate(e) { const x = e.resign || {}; return Math.round(Math.max(e.rate * 1.1, x.offer || 0)); }
+function tryCounter(e) {
+  const x = e.resign || { counter: 0.5 }, nr = counterRate(e);
+  if (!chance(x.counter)) return false;
+  e.rate = Math.max(e.rate, nr);
+  e.status = e.regular || S.day - e.hired >= LAW.probationDays ? 'regular' : 'probi';
+  e.morale = clamp(Math.max(e.morale, 65) + 5, 0, 100); delete e.resign; delete e.leaveOn;
+  return true;
+}
+function requestReplacement(e) {
+  const by = onDuty('hr') || onDuty('supervisor'); if (!by || by === e) return;
+  if (APV().some((a) => a.kind === 'hire' && a.data.role === e.role)) return;
+  addApproval('hire', by, `Replacement: 1 ${roleDef(e.role).name}`, `${e.name} leaves on ${fshort(e.leaveOn || S.day)}. HR recommends hiring a replacement now so there is time to train them before the last day.\n\nMarket rate about ${peso(monthlyOf(marketWage(e.role)))}/month.`, { role: e.role }, 14);
+}
