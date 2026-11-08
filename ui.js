@@ -162,6 +162,7 @@ function viewHome(V) {
     kp(IND().channel === 'b2b' ? 'Client loyalty' : 'Reputation', `${Math.round(S.rep)}/100`, [S.rep >= 60 ? 'Maganda' : S.rep >= 40 ? 'OK lang' : 'Mababa', S.rep >= 50 ? 'up' : 'dn']),
     S.board.none ? kp(S.loans.length ? 'Loan balance' : 'Ownership', S.loans.length ? pesoK(S.loans.reduce((x, L) => x + L.bal, 0)) : '100% ikaw', S.loans.length ? ['next payment on the 1st', 'mute'] : ['walang board', 'mute']) : kp('Board confidence', `${Math.round(S.board.conf)}%`, [S.board.conf >= 60 ? 'Masaya ang board' : S.board.conf >= 35 ? 'Nag-aalala' : 'Delikado ka', S.board.conf >= 50 ? 'up' : 'dn']));
   V.appendChild(K);
+  const apc = approvalsCard(); if (apc) V.appendChild(apc);
   const todo = todoCard(); if (todo) V.appendChild(todo);
   V.appendChild(stageCard());
   const Qc = questCard(); if (Qc) V.appendChild(Qc);
@@ -263,10 +264,32 @@ function questCard() {
 }
 // obligations: reports for the board and payments to the government
 function pendingReports() { return S.board.none ? [] : S.inbox.filter((m) => m.act && m.act.kind === 'report' && !S.board.reportSent[m.act.k]); }
+function approvalsCard() {
+  const L = APV(); if (!L.length) return null;
+  const C = card(`✍️ Para sa approval mo (${L.length})`, 'your staff recommend, you decide');
+  for (const a of L.slice().sort((p, q) => p.exp - q.exp)) {
+    const left = a.exp - S.day, K = APPROVAL_KINDS[a.kind];
+    C.appendChild(row(`<span class="t">${esc(a.title)}</span><small>${esc(a.from)}${a.kind !== 'pay' ? ` · ${left <= 3 ? '<span class="neg">' + left + ' day(s) left</span>' : left + ' days left'}` : ''}</small>`, btn('Review', () => approvalScene(a.id), 'primary'), { em: K.em }));
+  }
+  return C;
+}
+function approvalScene(id) {
+  const a = APV().find((x) => x.id === id); if (!a) return closeS();
+  const K = APPROVAL_KINDS[a.kind], nodes = [];
+  if (a.kind === 'pay') {
+    const xs = voucherItems(a);
+    nodes.push(el(`<div class="note b">Prepared by ${esc(a.from)}. Sign to release the payments. Gov't dues are filed online once paid.</div>`));
+    for (const x of xs) { const late = x.due < S.day; nodes.push(row(`<span class="t ${late ? 'neg' : ''}">${esc(x.label)}</span><small>${late ? 'OVERDUE, with penalty' : 'Due ' + fdate(x.due)}</small>`, peso(Math.round(voucherAmt(x))))); }
+    nodes.push(row('<b>Cash in bank</b>', peso(Math.round(cash()))));
+  } else nodes.push(el(`<div class="note">${esc(a.body)}</div>`));
+  const ch = K.choices(a).map((c, i) => ({ label: c.label, sub: c.sub, cls: c.cls, fn: () => { const m = resolveApproval(a.id, i); if (m == null) { closeS(); return; } save(); done(c.label, esc(m), K.em); } }));
+  ch.push({ label: 'Mamaya na', sub: 'Decide later', fn: closeS });
+  scene({ em: K.em, title: esc(a.title), sub: esc(a.from), nodes, choices: ch });
+}
 function todoCard() {
   const reps = pendingReports(), dues = S.due.filter((x) => !x.paid && (x.due - S.day <= 10)).sort((a, b) => a.due - b.due);
   if (!reps.length && !dues.length) return null;
-  const C = card('\u{1F4CB} Dapat gawin', bookkeeper() ? 'bookkeeper pays on time' : '');
+  const C = card('\u{1F4CB} Dapat gawin', bookkeeper() ? (S.policy.approvePay === false ? 'bookkeeper pays on time' : 'bookkeeper prepares the voucher') : '');
   for (const m of reps) C.appendChild(row(`<span class="t">Send ${ymLabel(m.act.k)} report to the board</span><small>${m.act.prepared ? 'Prepared by your bookkeeper' : 'Due by the 10th'}</small>`, btn('Review & send', () => openMail(m), 'primary'), { em: '\u{1F4E8}' }));
   for (const x of dues) { const late = x.due < S.day, amt = x.kind === '13th' ? thirteenthAmount().total : x.amt + penaltyFor(x); C.appendChild(row(`<span class="t ${late ? 'neg' : ''}">${esc(x.label)}</span><small>${late ? 'OVERDUE \u00b7 penalty growing' : 'Due ' + fdate(x.due)}</small>`, btn(`Pay ${pesoK(amt)}`, () => payNow(x.id), late ? 'danger' : 'primary'), { em: late ? '\u{1F6A8}' : '\u{1F4C5}' })); }
   return C;
@@ -299,6 +322,7 @@ function howTo() {
   scene({ em: '❓', title: 'Paano laruin', sub: 'How to play Negosyante PH', nodes: [
     ...(b2b ? [el('<div class="note b"><b>Ikaw ang distributor (middleman)</b>\n\u{1F3ED} Supplier \u2192 \u{1F69A} IKAW \u2192 \u{1F3EA} Clients (sari-sari stores) \u2192 \u{1F468}\u200D\u{1F469}\u200D\u{1F467} consumers\nYou BUY cases from the supplier (Ops \u2192 Stock & PO), and SELL and DELIVER them to stores (Ops \u2192 Clients). Profit is the ~12% difference, so volume matters. Watch cash: you often pay the supplier before stores pay you.</div>')] : []),
     el(`<div class="note g"><b>Ang loop araw-araw</b>\n1. Ayusin ang negosyo: ${b2b ? 'buy stock, pitch clients' : 'set prices, check capacity'} (Ops tab).\n2. Tap <b>Next day</b>: the business runs for one day.\n3. On Home, read <b>Kahapon</b> and <b>Ano ang gagawin ngayon?</b>\n4. Fix the biggest problem, then repeat. Turn on <b>Auto</b> when things run smoothly.\nNot sure? Follow <b>Mga misyon</b> and tap <b>Gawin</b>.</div>`),
+    el('<div class="note g"><b>\u270D\uFE0F Ikaw ang boss: approvals</b>\nOnce you hire them, your staff do their jobs and send you recommendations on Home \u2192 Para sa approval mo:\n\u2022 HR: salary increase after regularization, yearly merit increases, quarterly bonus, manpower requests\n\u2022 Bookkeeper: payment voucher for taxes, SSS and supplier bills; price changes when costs go up\n\u2022 Supervisor: accept or decline supply contracts\nYou only approve, approve half, or decline. Ignoring a request too long has consequences (late penalties, lower morale).</div>'),
     el('<div class="note b"><b>Every month</b>\n• Payroll runs by itself on the 15th and end of month.\n• Pay SSS, PhilHealth, Pag-IBIG and BIR in Books → Compliance (or hire a bookkeeper).\n• Send the monthly report to the board (Home inbox).\n<b>Every quarter</b>: board meeting with questions about your numbers.\n<b>Every year</b>: annual report and grade, permit renewal, income tax return.</div>'),
     el(`<div class="note"><b>Ang mga tab</b>\nHome: today’s results, missions, what to do next, inbox\nOps: ${b2b ? 'stock, clients, receivables, prices, fleet' : 'production or stock, prices, capacity, equipment, location'}\nTao: your own job, staff, hiring, HR cases, payroll, benefits\nBooks: financial statements, compliance calendar, journal\nBoard: targets, investors, loans, annual reports</div>`),
     el('<div class="note r"><b>Paano matalo</b>: negative cash for 30 days, or board confidence under 20% at two meetings in a row.\n<b>Paano manalo</b>: climb the 6 stages on Home (Bagong bukas \u2192 Negosyante ng Taon). Each stage unlocks something: new products, contracts, bigger locations, branches.\n<b>Hindi lumalaki ang benta?</b> Open Ops \u2192 Paglago: it shows your bottleneck and what each fix is worth.</div>')],
@@ -633,7 +657,11 @@ function peoplePolicy(V) {
   C.appendChild(row('<span class="t">Overtime (2 hrs/day)</span><small>+25% capacity, OT pay at 125%, tired workers</small>', btn(S.policy.overtime ? 'ON' : 'OFF', () => { S.policy.overtime = !S.policy.overtime; save(); render(); }, S.policy.overtime ? 'primary' : '')));
   C.appendChild(row('<span class="t">Open on holidays</span><small>Worked regular holidays pay 200%, special days 130%</small>', btn(S.policy.openHolidays ? 'OPEN' : 'CLOSED', () => { S.policy.openHolidays = !S.policy.openHolidays; save(); render(); }, S.policy.openHolidays ? 'primary' : '')));
   C.appendChild(row('<span class="t">Register new hires with SSS, PhilHealth, Pag-IBIG</span><small>Required by law. Turning it off saves contributions, until DOLE or SSS finds out.</small>', btn(S.policy.register ? 'YES' : 'NO', () => { S.policy.register = !S.policy.register; save(); render(); }, S.policy.register ? 'primary' : 'danger')));
-  V.appendChild(C);
+  C.appendChild(row('<span class="t">Payments need my approval</span><small>ON: the bookkeeper prepares a payment voucher and you sign it. OFF: the bookkeeper pays taxes and bills on their own.</small>', btn(S.policy.approvePay === false ? 'OFF' : 'ON', () => { S.policy.approvePay = S.policy.approvePay === false; save(); render(); }, S.policy.approvePay === false ? '' : 'primary')));
+  const H = card('Recent decisions', `${(S.approvalLog || []).length}`);
+  for (const x of (S.approvalLog || []).slice(0, 10)) H.appendChild(row(`<span class="t">${esc(x.title)}</span><small>${esc(x.from)} \u00b7 ${fshort(x.d)}</small>`, `<small>${esc(x.what)}</small>`));
+  if (!(S.approvalLog || []).length) H.appendChild(el('<div class="empty">Staff recommendations you approve or decline show up here.</div>'));
+  V.appendChild(C); V.appendChild(H);
 }
 function peopleLaw(V) {
   const C = card('Labor & tax quick guide');
@@ -871,7 +899,7 @@ const HANDLERS = {
   terms: () => { const lim = Math.round(S.supplier.bought * 0.25 / 10000) * 10000 || 100000; scene({ em: '\u{1F91D}', title: 'Supplier offers credit terms', body: `Your supplier is happy with your orders. They offer 30-day terms up to ${peso(lim)}. Pay late and they cut you off.`, choices: [{ label: 'Accept 30-day terms', cls: 'primary', fn: () => { S.supplier.terms = true; S.supplier.limit = lim; done('Credit line open', 'Use the "30d" buttons in Ops → Stock. Bills appear in Books → Compliance.'); } }, { label: 'No thanks, cash lang', fn: closeS }] }); },
   regularize: (ev) => { const e = empOf(ev.emp); if (!e || e.status !== 'probi') return closeS(); const days = S.day - e.hired; scene({ em: roleDef(e.role).em, title: `Probation review: ${esc(e.name)}`, sub: `${roleDef(e.role).name} · ${days} days employed`,
     nodes: [meter('Skill', e.skill * 70, 100), meter('Morale', e.morale, 100), el(`<div class="note b">${absText(e).line}\nProbation ends at 6 months; after that they become regular automatically and can only be dismissed for just or authorized cause.</div>`), ...(hrOfficer() ? [el(`<div class="note g"><b>\u{1F4C1} HR (${esc(hrOfficer().name)}) recommends:</b> ${(() => { const t = absText(e); return t.a.noshow >= 3 || t.rate > Math.max(0.08, (t.tr || 0.04) * 2) ? 'end probation: attendance below the standard set at hiring' : e.skill < 0.7 ? 'end probation: performance below standard' : 'regularize: meets the standards'; })()}.</div>`)] : [])],
-    choices: [{ label: 'Regularize', sub: 'Morale +10', cls: 'primary', fn: () => { e.status = 'regular'; e.regular = true; e.morale = clamp(e.morale + 10, 0, 100); done(`${esc(e.name)} is now regular`, 'Congratulations sent. \u{1F389}'); } },
+    choices: [{ label: 'Regularize', sub: 'Morale +10', cls: 'primary', fn: () => { e.status = 'regular'; e.regular = true; onRegularized(e); e.morale = clamp(e.morale + 10, 0, 100); done(`${esc(e.name)} is now regular`, 'Congratulations sent. \u{1F389}' + (hrOfficer() ? '\n\nHR will send you a salary increase recommendation for approval.' : '')); } },
       { label: 'End probation: did not meet the standards', sub: 'Legal if the standards were explained on day one (they were). Final pay due in 30 days.', cls: 'warn', fn: () => { separate(e, 'probation ended'); done('Probation ended', `${esc(e.name)} was informed in writing. Release the final pay within 30 days.`); } }] }); },
   resign: (ev) => { const e = empOf(ev.emp); if (!e) return closeS(); scene({ em: '\u{1F4E8}', title: `${esc(e.name)} is resigning`, sub: `${roleDef(e.role).name} · last day ${fshort(e.leaveOn)}`, body: `"Salamat po sa lahat, pero may nakita po akong mas magandang offer."\n\nMorale was ${Math.round(e.morale)}. They gave the 30-day notice the law requires.`,
     choices: [{ label: 'Accept the resignation', fn: closeS }, { label: `Counter-offer: raise to ${peso(Math.round(e.rate * 1.1))}/day`, sub: 'They may stay', cls: 'primary', fn: () => { if (chance(0.6)) { e.rate = Math.round(e.rate * 1.1); e.status = e.regular || S.day - e.hired >= LAW.probationDays ? 'regular' : 'probi'; e.morale = 65; done('Nag-stay siya!', `${esc(e.name)} withdrew the resignation.`); } else done('Hindi pumayag', `${esc(e.name)} still leaves on ${fshort(e.leaveOn)}.`, '\u{1F614}'); } },
@@ -936,7 +964,7 @@ function empScene(e) {
     { label: 'Give a ₱1,000 bonus', sub: 'Morale +8', fn: () => { post(`Bonus: ${e.name}`, [[6020, 1000], [1000, -1000]]); e.morale = clamp(e.morale + 8, 0, 100); save(); empScene(e); } }
   ];
   if (!e.registered) ch.push({ label: 'Register with SSS, PhilHealth, Pag-IBIG', cls: 'primary', fn: () => { e.registered = true; save(); empScene(e); } });
-  if (e.status === 'probi') ch.push({ label: 'Regularize now', cls: 'primary', fn: () => { e.status = 'regular'; e.regular = true; e.morale = clamp(e.morale + 10, 0, 100); save(); empScene(e); } });
+  if (e.status === 'probi') ch.push({ label: 'Regularize now', cls: 'primary', fn: () => { e.status = 'regular'; e.regular = true; onRegularized(e); e.morale = clamp(e.morale + 10, 0, 100); save(); empScene(e); } });
   const years = Math.max(1, Math.round(days / 365)), sep = Math.round(e.rate * 26 * years);
   ch.push({ label: `Lay off (redundancy): separation pay ${peso(sep)}`, sub: 'Authorized cause: 1 month per year of service, plus DOLE notice', cls: 'warn', fn: () => ask(`Lay off ${e.name}? Separation pay ${peso(sep)} plus final pay.`, () => { post(`Separation pay: ${e.name}`, [[6220, sep], [1000, -sep]]); separate(e, 'laid off'); e.morale = 0; for (const x of active()) x.morale = clamp(x.morale - 4, 0, 100); done('Laid off', 'DOLE was notified (RKS Form 5). Final pay due within 30 days.'); }) });
   ch.push({ label: 'Close', fn: closeS });

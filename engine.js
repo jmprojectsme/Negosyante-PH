@@ -456,7 +456,7 @@ function simDay() {
   if (dom(d) === 15 || isMonthEnd(d)) payroll(d, isMonthEnd(d));
   if (isMonthEnd(d)) monthEnd(d);
   dueReminders(d);
-  if (bookkeeper()) autoPay(d);
+  approvalsDaily(d, R);
   S.salesLog.push(R.sales); if (S.salesLog.length > 400) S.salesLog.shift();
   S.dailyLog.push({ d, sales: R.sales, gp: R.sales - R.cogs, cust: R.cust, served: R.served, cash: cash() }); if (S.dailyLog.length > 120) S.dailyLog.shift();
   if (cash() < 0) { S.negDays = (S.negDays || 0) + 1; if (S.negDays === 1) inbox('Accountant', 'Negative cash!', `Your bank account is overdrawn. Collect receivables, sell assets, take a loan, ${S.board.none ? 'or put in personal savings (Board tab \u2192 Owner)' : 'or ask the board for capital'}. After 30 days in the negative the business closes.`); }
@@ -986,8 +986,9 @@ function monthStart(d) {
     else inbox('Board', `Monthly report for ${ymLabel(prev)}`, 'Please send the monthly financial report by the 10th. (A bookkeeper would prepare it for you.)', { kind: 'report', k: prev });
   }
   monthlyMarket(d);
+  approvalsMonthly(d);
   S.offers = (S.offers || []).filter((o) => o.exp >= d);
-  if (S.stage >= 2 && IND().channel === 'walkin' && chance(0.7)) { const o = contractOffer(); if (o) { S.offers.push(o); inbox('Sales', `Supply contract offer: ${o.name}`, `${o.qty} ${IND().lines[o.line].name} every working day at ${peso(o.price)} each, ${o.terms}-day terms, for ${o.months} months. Decide in Ops \u2192 Contracts before ${fshort(o.exp)}.`); } }
+  if (S.stage >= 2 && IND().channel === 'walkin' && chance(0.7)) { const o = contractOffer(); if (o) { S.offers.push(o); recommendContract(o); inbox('Sales', `Supply contract offer: ${o.name}`, `${o.qty} ${IND().lines[o.line].name} every working day at ${peso(o.price)} each, ${o.terms}-day terms, for ${o.months} months. Decide in Ops \u2192 Contracts before ${fshort(o.exp)}.`); } }
   // market prices drift (inflation about 4% a year, plus noise)
   for (const k in S.market) S.market[k] = clamp(S.market[k] * (1 + rnd(-0.008, 0.012)), 0.7, 2.5);
   if (monthOf(d) === 7 && yearOf(d) >= 2028) {   // a new wage order every July after 2027
@@ -1048,7 +1049,7 @@ function monthEnd(d) {
   for (const e of active()) {
     const days = d - e.hired;
     if (e.status === 'probi' && days >= 150 && !e.evalAsked) { e.evalAsked = true; queue({ type: 'regularize', emp: e.id }); }
-    if (e.status === 'probi' && days >= LAW.probationDays) { e.status = 'regular'; inbox('HR', `${e.name} is now a regular employee`, 'Probation ended without a decision, so the law makes them regular automatically.'); }
+    if (e.status === 'probi' && days >= LAW.probationDays) { e.status = 'regular'; onRegularized(e); inbox('HR', `${e.name} is now a regular employee`, 'Probation ended without a decision, so the law makes them regular automatically.'); }
   }
 }
 function quarterEnd(d) {
@@ -1069,6 +1070,7 @@ function quarterEnd(d) {
     const tax = r2(Math.max(0, taxable * rate) - already);
     if (tax > 0) { post(`Income tax Q${q} ${y}`, [[7000, tax], [2160, -tax]]); S.flags['itPaid_' + y] = already + tax; addDue('itq', `Quarterly income tax, BIR 1702Q (Q${q} ${y})`, 2160, tax, d + 60); }
   }
+  { const qn = incomeStatement(keys).net; bonusProposal(q, y, qn); }
   S.flags['q_' + y + '_' + q] = true;
 }
 function yearEnd(d) {
