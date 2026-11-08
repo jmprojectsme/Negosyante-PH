@@ -1297,11 +1297,12 @@ function cashGame() {
 function setupPWA() {
   try {
     if (!('serviceWorker' in navigator) || !/^https:|^http:\/\/localhost/.test(location.href)) return;
-    navigator.serviceWorker.register('sw.js').then((reg) => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {   // always check the server for a new version
       const offer = (w) => { $('updBar').classList.remove('hide'); $('btnUpd').onclick = () => { if (S) save(); w.postMessage('skipWaiting'); }; };
       if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
       reg.addEventListener('updatefound', () => { const w = reg.installing; w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); }); });
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });   // check again whenever the app comes back to the front
     }).catch(() => {});
     // reload only when an update replaces a running version, not on the very first install
     const hadController = !!navigator.serviceWorker.controller;

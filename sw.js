@@ -1,4 +1,5 @@
-/* Negosyante PH service worker: works offline, updates when a new version is published. */
+/* Negosyante PH service worker: works offline, updates when a new version is published.
+   version.js holds the version; the page registers this worker with updateViaCache: 'none'. */
 importScripts('version.js');
 const CACHE = 'negosyante-' + APP_VERSION;
 const FILES = ['./', 'index.html', 'style.css', 'version.js', 'data.js', 'engine.js', 'features.js', 'ui.js', 'app.webmanifest',
