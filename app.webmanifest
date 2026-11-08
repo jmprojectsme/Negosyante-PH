@@ -1,9 +1,9 @@
 {
-  "id": "/Negosyante-PH/?app=negosyante-ph",
+  "id": "/Negosyante-PH/negosyante-ph-app",
   "name": "Negosyante PH: Business Simulator",
   "short_name": "Negosyante",
   "description": "Start a Philippine business, hire people, follow labor and tax law, keep the books, and grow.",
-  "start_url": "./index.html?source=pwa",
+  "start_url": "./?launch=app",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

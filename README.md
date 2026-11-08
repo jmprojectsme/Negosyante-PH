@@ -13,7 +13,7 @@ A Philippine business simulator: start a distribution company, carinderia, baker
 | `features.js` | Stages, market news and trends, new products, supply contracts, job openings, growth advisor |
 | `ui.js` | Screens, scenes, mini-games, PWA registration |
 | `version.js` | Single version number (used by the service worker cache) |
-| `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline and installable |
+| `sw.js`, `app.webmanifest`, `icons/` | PWA: offline and installable |
 
 ## Releasing an update
 Change `APP_VERSION` in `version.js`. Installed copies show "May bagong version! I-update".
