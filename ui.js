@@ -31,7 +31,8 @@ function btn(label, fn, cls, dis) { const b = el(`<button type="button" class="s
 function btns(...bs) { const d = el('<div class="row" style="gap:6px;justify-content:flex-end;flex:none"></div>'); bs.forEach((b) => b && d.appendChild(b)); return d; }
 function seg(items, cur, fn) { const s = el('<div class="seg"></div>'); for (const [k, label] of items) { const b = el(`<button type="button" class="${k === cur ? 'on' : ''}">${label}</button>`); b.addEventListener('click', () => fn(k)); s.appendChild(b); } return s; }
 function stepper(val, dec, inc) { const s = el(`<div class="stepper"></div>`); s.append(btn('−', dec), el(`<b>${val}</b>`), btn('+', inc)); return s; }
-function meter(label, v, max, cls) { const p = clamp(v / max, 0, 1) * 100; return el(`<div class="meter"><small><span>${label}</span><span>${Math.round(v)}${max === 100 ? '' : '/' + Math.round(max)}</span></small><div class="bar ${cls || (p < 35 ? 'r' : p < 60 ? 'w' : '')}"><i style="width:${p}%"></i></div></div>`); }
+const fmtN = (x) => (Math.abs(x) < 10 && Math.round(x) !== Math.round(x * 10) / 10 ? (Math.round(x * 10) / 10).toFixed(1) : Math.round(x).toLocaleString('en-PH'));
+function meter(label, v, max, cls) { const p = clamp(v / max, 0, 1) * 100; return el(`<div class="meter"><small><span>${label}</span><span>${fmtN(v)}${max === 100 ? '' : '/' + fmtN(max)}</span></small><div class="bar ${cls || (p < 35 ? 'r' : p < 60 ? 'w' : '')}"><i style="width:${p}%"></i></div></div>`); }
 
 // ---------- title & setup ----------
 // ---------- settings (for the whole app, not per company) ----------
@@ -276,7 +277,7 @@ function questList() {
   const firstRole = b2b ? 'driver' : ((rows.find((x) => x.have < x.need) || rows[0] || {}).r || Object.keys(I.roles)[0]);
   const Q = b2b ? [
     { id: 'stock', t: 'Bumili ng stock', how: 'Ops → Stock & PO: tap +10 on items with less than 3 days of stock. The supplier delivers tomorrow.', go: () => go('ops', 'stock'), done: () => F.boughtStock },
-    { id: 'day1', t: 'Buksan ang negosyo', how: 'Tap Next day. You drive the motorsiklo and deliver your clients’ orders. Then read the "Kahapon" card.', go: () => go('home'), done: () => S.day > S.start + 1 },
+    { id: 'day1', t: 'Buksan ang negosyo', how: `Tap Next day. You drive the ${esc((I.assets[I.startAssets[0]] || { name: 'vehicle' }).name.toLowerCase())} and deliver your clients’ orders. Then read the "Kahapon" card.`, go: () => go('home'), done: () => S.day > S.start + 1 },
     { id: 'pitch', t: 'Kumuha ng bagong client', how: 'Ops → Clients: when a prospect appears, tap Pitch. More clients means more orders.', go: () => go('ops', 'clients'), done: () => F.pitched || S.clients.length > 8 }
   ] : [
     { id: 'price', t: 'Tingnan ang presyo mo', how: 'Ops → Prices: compare your price with the market. Cheaper brings more customers; pricier gives more margin.', go: () => go('ops', 'prices'), done: () => F.visitedPrices },
@@ -287,7 +288,7 @@ function questList() {
   if (!S.board.none) Q.push({ id: 'report', t: 'I-send ang monthly report', how: 'On the 1st of each month the board asks for last month\u2019s report. It appears in the \u{1F4CB} Dapat gawin card on Home: tap Review & send before the 10th.', go: () => go('home'), done: () => Object.keys(S.board.reportSent).length > 0 });
   Q.push({ id: 'pay', t: 'Magbayad sa gobyerno', how: 'Payments show up in the \u{1F4CB} Dapat gawin card on Home (and Books \u2192 Compliance) after the end-of-month payroll. Pay before the due date, or hire a Bookkeeper to pay them for you.', go: () => go('books', 'comp'), done: () => F.paidGov });
   Q.push({ id: 'profit', t: 'Kumita sa isang buong buwan', how: 'Books → Income statement → Last month: net income must be positive. Raise sales, cut waste, don’t over-hire.', go: () => go('books', 'pl', () => { UI.period = 'last'; }), done: pastMonthProfit });
-  Q.push(b2b ? { id: 'van', t: 'Bumili ng mas malaking sasakyan', how: 'Ops → Fleet & site: a Multicab (60 cases) or L300 (150 cases) delivers far more than the motorsiklo. Hire a driver for it.', go: () => go('ops', 'fleet'), done: () => ['multicab', 'l300', 'truck'].some(hasAsset) }
+  Q.push(b2b ? { id: 'van', t: 'Bumili ng mas malaking sasakyan', how: 'Ops → Fleet & site: a bigger vehicle (L300 van or a truck) delivers far more per trip. Hire a driver for it.', go: () => go('ops', 'fleet'), done: () => ['multicab', 'l300', 'truck'].some(hasAsset) }
     : { id: 'equip', t: 'Mag-upgrade ng equipment', how: 'Ops → Equipment: buy something that removes your bottleneck (a stove, oven, machine, POS or freezer).', go: () => go('ops', 'equip'), done: () => S.assets.length > (F.startAssets || 0) });
   if (!S.board.none) Q.push({ id: 'board', t: 'Harapin ang board', how: 'The first quarterly meeting is in April. They will quiz you: know your gross margin and net income (Books tab).', go: () => go('company', 'board'), done: () => S.board.history.length > 0 });
   Q.push({ id: 'grow', t: 'Lumaki: 5 empleyado', how: 'Hire as demand grows. At 10 workers holiday pay and SIL apply; above 15 the higher minimum wage applies.', go: () => go('people', 'hire'), done: () => headcount() >= 5 });
@@ -517,7 +518,7 @@ function capRows() {
     let need = 0;
     if (I.channel === 'walkin') {
       const served = (S.last && S.last.cust) || I.base;
-      if (['server', 'cashier', 'clerk'].includes(r) && S.ind !== 'laundry') need = served;
+      if (['server', 'cashier', 'clerk'].includes(r) && I.mode !== 'service') need = served;
       else if (r === 'stocker') need = Object.keys(I.lines).reduce((s, k) => s + forecast(k), 0);
       else for (const k in I.lines) need += forecast(k) * ((I.lines[k].work || {})[r] || 0);
     }
@@ -529,10 +530,10 @@ function opsCap(V) {
   const I = IND();
   const C = card('Capacity vs demand', 'per day');
   if (I.channel === 'walkin') {
-    for (const x of capRows()) C.appendChild(meter(`${x.em} ${x.name} · ${Math.round(x.have)} ${x.unit || ''} capacity`, x.have, Math.max(1, x.need), x.have >= x.need ? '' : 'r'));
+    for (const x of capRows()) C.appendChild(meter(`${x.em} ${x.name} · ${fmtN(x.have)} ${x.unit || ''} capacity`, x.have, Math.max(1, x.need), x.have >= x.need ? '' : 'r'));
     if (S.ind === 'food') { const seats = S.locs.reduce((s, t) => s + I.locations[t].seats, 0); C.appendChild(row('Seats \u00d7 turns (+40% take-out)', `${seats} \u00d7 ${I.turns} \u00f7 0.6 = ${Math.round(seats * I.turns / 0.6)}`)); }
     if (S.ind === 'bakery') C.appendChild(row('Oven capacity', `${assetCount('oven')} × ${I.ovenCap} = ${assetCount('oven') * I.ovenCap} units`));
-    if (S.ind === 'laundry') { C.appendChild(row('Washers', `${assetCount('washer')} × ${I.machineCap} loads`)); C.appendChild(row('Dryers', `${assetCount('dryer')} × ${I.machineCap} loads`)); C.appendChild(row('Demand', `~${Math.round(forecast('wdf') + forecast('self'))} loads/day`)); }
+    if (I.machines) { const mc = machineCaps(false), names = { washer: 'Washers', dryer: 'Dryers', truck: 'Trucks (trips/day)', tractor: 'Prime movers (trips/day)' }; for (const m in mc) { let need = 0; for (const k in I.lines) if (!(I.lines[k].needs && !hasAsset(I.lines[k].needs))) need += forecast(k) * ((I.lines[k].work || {})[m] || 0); if (mc[m] || need) C.appendChild(meter(`${names[m] || m} · ${Math.round(mc[m] * 10) / 10} capacity`, mc[m], Math.max(1, need), mc[m] >= need ? '' : 'r')); } }
     C.appendChild(el('<div class="note b">A red bar means customers leave or items run out. Hire for that role, buy equipment, or work that role yourself (Tao → Ikaw).</div>'));
   }
   V.appendChild(C);
@@ -605,13 +606,20 @@ function opsClients(V) {
   if (S.clients.length > clientCapacity()) C.appendChild(el('<div class="note r">More clients than your sales team can visit. Loyalty drops: hire a salesman.</div>'));
   for (const c of S.clients.slice().sort((a, b) => b.bought - a.bought)) {
     const ar = S.ar.filter((a) => a.c === c.id).reduce((s, a) => s + a.amt - a.paid, 0);
-    C.appendChild(row(`<span class="t">${esc(c.name)}</span><small>${CLIENT_TYPES[c.type].label} · ${c.terms ? c.terms + '-day terms' : 'COD'} · bought ${pesoK(c.bought)}${ar ? ` · owes ${pesoK(ar)}` : ''}</small>`, el(`<div style="width:70px">${meter('', c.loyal, 100).outerHTML}</div>`), { tap: () => clientScene(c) }));
+    C.appendChild(row(`<span class="t">${esc(c.name)}</span><small>${CT()[c.type].label} · ${c.terms ? c.terms + '-day terms' : 'COD'} · bought ${pesoK(c.bought)}${ar ? ` · owes ${pesoK(ar)}` : ''}</small>`, el(`<div style="width:70px">${meter('', c.loyal, 100).outerHTML}</div>`), { tap: () => clientScene(c) }));
   }
   V.appendChild(C);
   const P = card('Prospects', `${S.prospects.length}`);
   if (!S.prospects.length) P.appendChild(el('<div class="empty">No leads yet. Salesmen and marketing bring in prospects. You find some too when you work as salesman.</div>'));
-  for (const p of S.prospects) P.appendChild(row(`<span class="t">${esc(p.name)}</span><small>${CLIENT_TYPES[p.type].label} · ~${CLIENT_TYPES[p.type].size} cases/order · wants ${p.terms ? p.terms + '-day terms' : 'COD'} · lead expires ${fshort(p.exp)}</small>`, btn('Pitch', () => pitchScene(p), 'primary')));
+  for (const p of S.prospects) P.appendChild(row(`<span class="t">${esc(p.name)}</span><small>${CT()[p.type].label} · ~${CT()[p.type].size} cases/order · wants ${p.terms ? p.terms + '-day terms' : 'COD'} · lead expires ${fshort(p.exp)}</small>`, btn('Pitch', () => pitchScene(p), 'primary')));
   V.appendChild(P);
+  if (I.projects) {
+    const J = card('\u2600\uFE0F Solar projects', `${(S.projects || []).filter((p) => p.status === 'ongoing').length} ongoing`);
+    J.appendChild(el(`<div class="note b">Rooftop solar projects come in from stage 2. Billing: 30% downpayment at signing, 60% progress billing when installed (15 days to pay), 10% retention after the 60-day warranty check. Materials come from your stock.${S.fx ? `\nDollar rate now: \u20b1${S.fx.toFixed(2)}/US$` : ''}</div>`));
+    for (const p of (S.projects || []).slice().reverse()) { const owes = S.ar.filter((a) => a.c === p.id).reduce((t, a) => t + a.amt - a.paid, 0); J.appendChild(row(`<span class="t">${esc(p.name)} \u00b7 ${p.kw} kWp</span><small>${p.status === 'ongoing' ? `Installing, done ${fshort(p.done)}` : `Done ${fshort(p.finished)}${owes ? ` \u00b7 to collect ${pesoK(owes)}` : ' \u00b7 fully paid'}`}</small>`, pesoK(p.price))); }
+    if (!(S.projects || []).length) J.appendChild(el('<div class="empty">No projects yet.</div>'));
+    V.appendChild(J);
+  }
 }
 function opsAR(V) {
   const ar = S.ar.slice().sort((a, b) => a.due - b.due);
@@ -945,6 +953,16 @@ function pump() {
 }
 const empOf = (id) => S.emps.find((e) => e.id === id);
 const HANDLERS = {
+  project: (ev) => { const p = ev.p, I = IND(), est = projectCostEstimate(p), gp = p.price - est;
+    const stockRows = Object.keys(p.need).map((k) => row(`${esc(I.lines[k].name)}`, `need ${p.need[k]} \u00b7 have ${Math.floor(stockQty(k))}`));
+    const sm = active().find((e) => e.role === 'salesman' && e.status !== 'awol');
+    scene({ em: '\u2600\uFE0F', title: `Solar project: ${esc(p.name)}`, sub: `${p.kw} kWp rooftop system \u00b7 about ${p.days} days to install`, nodes: [
+      el(`<div class="note">Contract price ${peso(p.price)}${S.vat ? ' (VAT-inclusive)' : ''}\nEstimated cost ${peso(est)} (materials from stock + installation subcontractor ${peso(p.subcon)})\nGross profit about ${peso(gp)} (${Math.round(gp / p.price * 100)}%)</div>`),
+      el(`<div class="note b">Billing schedule\n\u2022 30% downpayment today: ${peso(Math.round(p.price * 0.3))}\n\u2022 60% progress billing after installation, 15 days to pay\n\u2022 10% retention after the 60-day warranty check</div>`),
+      ...stockRows,
+      el(`<div class="note ${Object.keys(p.need).some((k) => stockQty(k) < p.need[k]) ? 'y' : 'g'}">${Object.keys(p.need).some((k) => stockQty(k) < p.need[k]) ? 'Not enough stock yet. Order before the installation date, or the missing items are bought in a rush at full cost on that day.' : 'Stock is enough for this project.'}${sm ? `\n\u{1F454} ${esc(sm.name)} (sales engineer) recommends: ${gp / p.price >= 0.12 ? 'ACCEPT' : 'DECLINE, margin too thin'}.` : ''}</div>`)],
+      choices: [{ label: 'Sign the contract', sub: `Receive ${peso(Math.round(p.price * 0.3))} downpayment now`, cls: 'primary', fn: () => { const dp = acceptProject(p); sfx('cash'); done('Contract signed!', `Downpayment of ${peso(dp)} received. It sits in Customer Deposits (a liability) until the system is installed and billed. Track it in Ops \u2192 Clients.`, '\u2600\uFE0F'); } },
+        { label: 'Decline', fn: closeS }] }); },
   info: (ev) => done(esc(ev.title), esc(ev.body), '\u{1F4E2}'),
   vat: () => scene({ em: '\u{1F9FE}', title: 'Lumampas ka na sa ₱3M!', body: 'Your gross sales in the last 12 months passed ₱3,000,000. The Tax Code requires you to register as a VAT taxpayer.\n\nVAT-registered: your prices now include 12% VAT, you claim input VAT on purchases, and file quarterly 2550Q. No more 3% percentage tax.\n\nNot registering is tax evasion: BIR can assess the VAT you should have charged, plus surcharge and interest.',
     choices: [{ label: 'Register for VAT (BIR Form 1905)', sub: 'Consider raising prices about 9% to keep your margins', cls: 'primary', fn: () => { S.vat = true; post('BIR registration update and new invoices', [[6160, 3000], [1000, -3000]]); done('VAT-registered', 'From today your sales carry 12% output VAT. Check your prices in Ops → Prices.'); } },
@@ -1214,7 +1232,7 @@ function doleScene() {
 function pitchScene(p) {
   let pc = pitchChance(p), terms = p.terms, disc = false;
   const draw = () => {
-    const nodes = [el(`<div class="note b">${CLIENT_TYPES[p.type].label} · orders about ${CLIENT_TYPES[p.type].size} cases every ${CLIENT_TYPES[p.type].freq} days · asks for ${p.terms ? p.terms + '-day terms' : 'cash on delivery'}</div>`), el(`<div class="speech">"Magkano ang bigas at de lata mo? Mas mura ba kaysa sa supplier ko ngayon?"</div>`), meter('Chance to win them', pc * 100, 100)];
+    const nodes = [el(`<div class="note b">${CT()[p.type].label} · orders about ${CT()[p.type].size} cases every ${CT()[p.type].freq} days · asks for ${p.terms ? p.terms + '-day terms' : 'cash on delivery'}</div>`), el(`<div class="speech">"Magkano ang bigas at de lata mo? Mas mura ba kaysa sa supplier ko ngayon?"</div>`), meter('Chance to win them', pc * 100, 100)];
     scene({ em: '\u{1F454}', title: `Sales call: ${esc(p.name)}`, nodes, choices: [
       { label: terms === p.terms ? `Agree to ${p.terms ? p.terms + '-day terms' : 'COD'}` : 'Back to their terms', sub: 'Longer terms tie up your cash', fn: () => { terms = p.terms; pc = pitchChance(p); draw(); } },
       { label: 'Insist on cash on delivery', sub: 'Safer cash flow, lower chance', dis: !p.terms, fn: () => { terms = 0; pc = pitchChance(p) * 0.6; draw(); } },
@@ -1225,7 +1243,7 @@ function pitchScene(p) {
   draw();
 }
 function clientScene(c) {
-  scene({ em: '\u{1F3EA}', title: esc(c.name), sub: `${CLIENT_TYPES[c.type].label} · client since ${fshort(c.since)}`, nodes: [meter('Loyalty', c.loyal, 100), el(`<div class="note b">Terms: ${c.terms ? c.terms + ' days' : 'COD'} · total bought ${peso(Math.round(c.bought))}</div>`)],
+  scene({ em: '\u{1F3EA}', title: esc(c.name), sub: `${CT()[c.type].label} · client since ${fshort(c.since)}`, nodes: [meter('Loyalty', c.loyal, 100), el(`<div class="note b">Terms: ${c.terms ? c.terms + ' days' : 'COD'} · total bought ${peso(Math.round(c.bought))}</div>`)],
     choices: [{ label: 'Change to COD', sub: 'Safer, but they may order less', dis: !c.terms, fn: () => { c.terms = 0; c.loyal -= 10; clientScene(c); } }, { label: 'Give 15-day terms', fn: () => { c.terms = 15; c.loyal += 5; clientScene(c); } }, { label: 'Give 30-day terms', fn: () => { c.terms = 30; c.loyal += 8; clientScene(c); } }, { label: 'Visit and treat them to merienda (₱500)', sub: 'Loyalty +10', fn: () => { post('Client visit', [[6130, 500], [1000, -500]]); c.loyal = clamp(c.loyal + 10, 0, 100); clientScene(c); } }, { label: 'Close', cls: 'primary', fn: closeS }] });
 }
 function collectScene(arId) {

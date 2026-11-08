@@ -71,7 +71,7 @@ const ACCOUNTS = {
   1500: ['Property & Equipment', 'A'], 1510: ['Accumulated Depreciation', 'XA'],
   2000: ['Accounts Payable', 'L'], 2100: ['SSS Payable', 'L'], 2110: ['PhilHealth Payable', 'L'], 2120: ['Pag-IBIG Payable', 'L'],
   2130: ['Withholding Tax Payable', 'L'], 2140: ['Percentage Tax Payable', 'L'], 2150: ['Output VAT', 'L'], 2160: ['Income Tax Payable', 'L'],
-  2170: ['13th Month Payable', 'L'], 2180: ['Other Payables', 'L'], 2200: ['Loans Payable', 'L'],
+  2170: ['13th Month Payable', 'L'], 2180: ['Other Payables', 'L'], 2190: ['Customer Deposits (unearned)', 'L'], 2200: ['Loans Payable', 'L'],
   3000: ['Share Capital', 'E'], 3100: ['Retained Earnings', 'E'], 3200: ['Dividends Declared', 'XE'],
   4000: ['Sales', 'R'], 4100: ['Other Income', 'R'],
   5000: ['Cost of Sales', 'X'],
@@ -242,7 +242,7 @@ const INDUSTRIES = {
       rider: { name: 'Rider', em: '\u{1F6F5}', wage: 0, cap: 24, unit: 'trips', desc: 'Pickup and delivery, needs a motorcycle' }
     },
     owner: { attendant: 16, rider: 10 },
-    machineCap: 12,
+    machineCap: 12, machines: { washer: 12, dryer: 12 },
     locations: [
       { name: 'Laundry sa looban', rent: 12000, traffic: 1, slots: 8, deposit: 2 },
       { name: 'Laundromat sa main road', rent: 30000, traffic: 2, slots: 14, deposit: 2 },
@@ -257,6 +257,111 @@ const INDUSTRIES = {
       pos: { name: 'POS & tagging', cost: 25000, life: 36, theft: 0.5, max: 1 }
     },
     startAssets: ['washer', 'washer', 'dryer', 'dryer']
+  }
+  ,
+  trucking: {
+    name: 'Logistics: Trucking & hauling', em: '\u{1F69B}', tag: 'Hard · expensive trucks, diesel prices',
+    desc: 'Haul cargo for businesses: Metro deliveries, provincial runs, lipat-bahay, and later port containers. Trucks cost millions, diesel moves every week, and drivers are the business.',
+    mode: 'service', channel: 'walkin', wageClass: 'nonagri', capital: 1400000, invest: [600000, 1600000],
+    base: 1.3, elastic: 1.3, noBrownout: true,
+    lines: {
+      metro: { name: 'Metro Manila delivery (per trip)', cost: 2000, price: 7500, p: 0.75, work: { driver: 1, truck: 1 }, u: 'trip' },
+      prov: { name: 'Provincial haul, Luzon (per trip)', cost: 7800, price: 21000, p: 0.16, work: { driver: 2, helper: 2, truck: 2 }, u: 'trip' },
+      moving: { name: 'Lipat-bahay / moving', cost: 1600, price: 5800, p: 0.2, work: { driver: 1, helper: 2, truck: 1 }, u: 'job' },
+      container: { name: 'Port container drayage (20/40 ft)', cost: 4200, price: 11500, p: 0.25, work: { driver: 1, tractor: 1 }, needs: 'tractor', u: 'trip' }
+    },
+    roles: {
+      driver: { name: 'Truck driver', em: '\u{1F468}‍✈️', wage: 900, cap: 1, unit: 'trips', desc: 'Drives one trip a day. Needs a professional license (restriction code for trucks)' },
+      helper: { name: 'Pahinante (helper)', em: '\u{1F4AA}', wage: 0, cap: 1.2, unit: 'trips', desc: 'Loads and unloads. Needed for provincial runs and lipat-bahay' }
+    },
+    owner: { driver: 0.8, helper: 0.5 },
+    machines: { truck: 1, tractor: 1 },
+    locations: [
+      { name: 'Garahe sa Valenzuela', rent: 25000, traffic: 1, slots: 3, deposit: 2 },
+      { name: 'Truck yard sa Bulacan (NLEX)', rent: 65000, traffic: 2.1, slots: 8, deposit: 2 },
+      { name: 'Logistics hub malapit sa Port Area', rent: 160000, traffic: 4, slots: 20, deposit: 3, priceTol: 1.15 }
+    ],
+    assets: {
+      van: { name: '4-wheeler closed van (2nd hand)', cost: 950000, life: 60, machine: 'truck' },
+      wing: { name: '6-wheeler wing van', cost: 2300000, life: 96, machine: 'truck', mcap: 1.7, tier: 1 },
+      tractor: { name: 'Prime mover + container chassis', cost: 3400000, life: 120, machine: 'tractor', unlock: 'tractor', tier: 1 },
+      gps: { name: 'GPS & fuel monitoring', cost: 45000, life: 36, theft: 0.5, boost: { driver: 0.1 }, max: 1 },
+      bay: { name: 'Own maintenance bay & tools', cost: 180000, life: 84, boost: { driver: 0.08, helper: 0.08 }, max: 1 }
+    },
+    startAssets: ['van']
+  },
+  tech: {
+    name: 'Tech: IT services & software', em: '\u{1F4BB}', tag: 'Medium · people are the product',
+    desc: 'Build websites and apps for clients and run IT support. Almost no cost of goods, but developers are expensive, get poached, and you bill by the day.',
+    mode: 'service', channel: 'walkin', wageClass: 'nonagri', capital: 500000, invest: [400000, 1000000],
+    base: 1.2, elastic: 1.15, noBrownout: true,
+    lines: {
+      web: { name: 'Website build (per dev-day)', cost: 500, price: 6000, p: 0.6, q: 2, work: { dev: 1 }, u: 'dev-day' },
+      app: { name: 'Mobile app build (per dev-day)', cost: 650, price: 8000, p: 0.3, q: 3, work: { dev: 1 }, needs: 'macs', u: 'dev-day' },
+      design: { name: 'UI/UX design (per designer-day)', cost: 350, price: 5000, p: 0.35, q: 2, work: { designer: 1 }, u: 'day' },
+      support: { name: 'IT support ticket', cost: 120, price: 900, p: 0.5, q: 3, work: { support: 1 }, u: 'ticket' }
+    },
+    roles: {
+      dev: { name: 'Software developer', em: '\u{1F468}‍\u{1F4BB}', wage: 1900, cap: 0.7, unit: 'billable days', desc: 'Builds websites and apps. About 70% of a dev day is billable (meetings, revisions, bug fixes)' },
+      designer: { name: 'UI/UX designer', em: '\u{1F3A8}', wage: 1500, cap: 0.7, unit: 'billable days', desc: 'Designs screens and brands, about 70% billable' },
+      support: { name: 'IT support technician', em: '\u{1F6E0}️', wage: 950, cap: 5, unit: 'tickets', desc: 'Fixes about 5 tickets a day, including on-site visits' }
+    },
+    owner: { dev: 0.6, designer: 0.3, support: 3 },
+    locations: [
+      { name: 'Coworking space (hot desks)', rent: 18000, traffic: 1, deposit: 1 },
+      { name: 'Small office sa Ortigas', rent: 70000, traffic: 2.2, deposit: 2 },
+      { name: 'Office floor sa BGC IT park', rent: 220000, traffic: 4.5, deposit: 3, priceTol: 1.2 }
+    ],
+    assets: {
+      laptops: { name: 'Team laptops & software licenses', cost: 250000, life: 36, boost: { dev: 0.1, designer: 0.1 }, max: 1 },
+      macs: { name: 'MacBooks + Apple/Google developer accounts', cost: 320000, life: 36, unlock: 'macs', max: 1 },
+      devops: { name: 'Dev tools: Jira, CI/CD, cloud test servers', cost: 60000, life: 24, boost: { dev: 0.12 }, max: 1 },
+      ups: { name: 'Fiber + backup LTE + UPS', cost: 55000, life: 48, power: true, boost: { support: 0.15 }, max: 1 }
+    },
+    startAssets: []
+  },
+  energy: {
+    name: 'Energy: LED lighting & solar', em: '\u{1F4A1}', tag: 'Hard · imports, dollar rate, big projects',
+    desc: 'Import LED lights and solar equipment, sell to hardware stores, electricians and installers, and win rooftop solar projects. The dollar rate moves your costs; projects pay in stages.',
+    mode: 'stock', channel: 'b2b', wageClass: 'nonagri', capital: 1200000, invest: [600000, 1500000], fx: true, projects: true,
+    lines: {
+      bulb: { name: 'LED bulbs 9W (box of 100)', cost: 4300, price: 5000, w: 1.3, u: 'box', imported: true },
+      tube: { name: 'LED T8 tubes (box of 25)', cost: 4000, price: 4650, w: 1, u: 'box', imported: true },
+      panel: { name: 'LED panel lights 2x2 (box of 4)', cost: 3700, price: 4300, w: 0.8, u: 'box', imported: true },
+      flood: { name: 'LED floodlights 100W (box of 4)', cost: 5300, price: 6200, w: 0.6, u: 'box', imported: true },
+      solar: { name: 'Solar panel 550W', cost: 6600, price: 7700, w: 0.7, u: 'pc', imported: true },
+      inverter: { name: 'Hybrid inverter 6kW', cost: 39000, price: 45500, w: 0.15, u: 'unit', imported: true },
+      battery: { name: 'LiFePO4 battery 5kWh', cost: 46000, price: 53500, w: 0.15, u: 'unit', imported: true }
+    },
+    starter: { bulb: 6, tube: 6, panel: 4, flood: 3, solar: 10, inverter: 1, battery: 1 },
+    clientTypes: {
+      small: { size: 1, freq: 6, terms: [0, 0, 7], label: 'Hardware / electrical store' },
+      medium: { size: 3, freq: 5, terms: [0, 15, 30], label: 'Electrical contractor' },
+      large: { size: 6, freq: 6, terms: [15, 30], label: 'Solar installer' },
+      chain: { size: 14, freq: 7, terms: [30], label: 'Developer / building admin' }
+    },
+    clientNames: ['RJ Electrical Supply', 'Bagong Liwanag Hardware', 'Tatay Ben Electrical Services', 'SunPinoy Solar Installers', 'Ace Wiring Contractors', 'Kuryente Masters', 'Lucky Star Hardware', 'Green Roof Solar', 'Villar Builders', 'MetroBright Electrical', 'Rizal Power Installers', 'JMR Construction', 'Solar Bayanihan Coop', 'Cavite Lights Center', 'Northpoint Condo Admin', 'Laguna Electric Supply'],
+    roles: {
+      driver: { name: 'Driver', em: '\u{1F468}‍✈️', wage: 820, desc: 'Drives one vehicle' },
+      helper: { name: 'Pahinante (helper)', em: '\u{1F4AA}', wage: 0, desc: '+25% load per trip on a vehicle (max 2 per vehicle)' },
+      salesman: { name: 'Sales engineer', em: '\u{1F454}', wage: 1150, desc: 'Services 25 clients, finds new ones, quotes projects, helps collect' },
+      clerk: { name: 'Warehouse clerk', em: '\u{1F4E6}', wage: 0, desc: 'Picks and loads 250 boxes/day, keeps counts accurate' }
+    },
+    owner: { salesman: 10, driver: 1, clerk: 90 },
+    locations: [
+      { name: 'Bodega + showroom', rent: 22000, storage: 400, slots: 2, deposit: 2 },
+      { name: 'Warehouse sa Pasig', rent: 70000, storage: 1600, slots: 5, deposit: 2, need: { clients: 20 } },
+      { name: 'Distribution center + training room', rent: 170000, storage: 5000, slots: 12, deposit: 3, need: { clients: 55 } }
+    ],
+    assets: {
+      multicab: { name: 'Multicab', cost: 280000, life: 60, cap: 40, fuel: 9, vehicle: true },
+      l300: { name: 'L300 FB van (2nd hand)', cost: 480000, life: 48, cap: 110, fuel: 12, vehicle: true },
+      truck: { name: '6-wheeler truck', cost: 2400000, life: 120, cap: 300, fuel: 10, vehicle: true, tier: 1 },
+      forklift: { name: 'Pallet jack & racks', cost: 65000, life: 60, clerkBoost: 0.4, max: 1 },
+      cctv: { name: 'CCTV system', cost: 25000, life: 60, theft: 0.4, max: 1 },
+      erp: { name: 'Inventory & billing system', cost: 45000, life: 36, theft: 0.5, collect: 0.08, max: 1 }
+    },
+    startAssets: ['multicab']
   }
 };
 
@@ -318,6 +423,9 @@ const PLACES = {
   bakery: ['bakery sa Marikina', 'pandesal stall sa Cubao', 'hotel pastry section', 'grocery bakeshop', 'home-based cake business'],
   minimart: ['convenience store (night shift)', 'grocery sa SM', 'sari-sari store ng tita', 'pharmacy', 'hardware store'],
   laundry: ['laundromat sa Sampaloc', 'hotel housekeeping', 'dry cleaner', 'kasambahay sa Quezon City'],
+  trucking: ['trucking company sa Valenzuela', 'courier hub', 'port brokerage', 'construction hauling', 'bus company'],
+  tech: ['web agency sa Makati', 'BPO IT department', 'freelance sa Upwork', 'bank IT department', 'startup sa BGC', 'computer shop'],
+  energy: ['electrical supply sa Quiapo', 'solar installer', 'Meralco contractor', 'hardware store', 'appliance center'],
   trading: ['softdrinks distributor', 'rice dealer sa Divisoria', 'courier company', 'logistics warehouse', 'beverage route sales', 'trucking company'],
   any: ['BPO call center', 'construction site', 'factory sa Laguna', 'family business', 'fast food crew', 'mall promodiser']
 };
@@ -331,6 +439,9 @@ const DISTANCE = [
 
 // hiring differs per industry: where people come from, what you ask, what papers they need
 const IND_HIRE = {
+  trucking: { post: 'Paskil sa terminal at FB group ng mga truck driver: "HIRING: Driver (Code 3), Pahinante"', req: 'Professional driver’s license with truck restriction code, NBI clearance, drug test', q: { q: 'Pinapa-overload ka ng customer para makatipid sila sa isang trip. Ano ang gagawin mo?', ans: ['"Hindi po pwede, delikado at bawal sa LTO. Hahatiin ko po sa dalawang trip at ire-report ko sa inyo."', '"Susubukan ko po kung kaya ng truck."', '"Basta may extra na bayad, sige po."'], by: 'hon' }, mix: { senior: 1.4, older: 1.5, fresh: 0.4 } },
+  tech: { post: 'Job post sa LinkedIn at tech FB groups: "Hiring developers (hybrid)"', req: 'Portfolio or GitHub, technical exam, NBI clearance', q: { q: 'Deadline bukas, pero may nakita kang bug na baka mag-leak ng data ng users. Ano ang gagawin mo?', ans: ['"Sasabihin ko po agad sa PM at sa client. Mas mabuting ma-late kaysa ma-leak ang data."', '"Ide-deploy ko po muna, aayusin ko na lang pagkatapos."', '"Hindi ko na po babanggitin, baka mapagalitan ako."'], by: 'hon' }, mix: { fresh: 1.5, shifter: 1.4, older: 0.4 } },
+  energy: { post: 'Job post sa electrical at solar FB groups: "Hiring sales engineer, driver, warehouse"', req: 'NBI clearance; sales engineers: electrical engineering background or TESDA electrical NC II', q: { q: 'Gusto ng client ng pinakamurang inverter kahit kulang sa laki para sa bahay nila. Ano ang ire-recommend mo?', ans: ['"Ipapaliwanag ko po ang load nila at ang tamang size. Kung kulang ang budget, mas maliit na system pero tama ang specs."', '"Ibibigay ko na lang po ang gusto nila."', '"Sasabihin ko pong okay lang, para makabenta."'], by: 'att' }, mix: { senior: 1.2, shifter: 1.2 } },
   trading: { post: 'Tanong-tanong sa mga driver at pahinante sa terminal', req: 'NBI clearance, driver\u2019s license for drivers', q: { q: 'Ayaw magbayad ng suki nating tindahan. Paano mo kokolektahin?', ans: ['"Kakausapin ko po nang maayos, mag-aalok ng hulugan, at babalikan ko sa mismong araw na pinangako."', '"Pupuntahan ko po ulit bukas."', '"Sisigawan ko po para matakot."'], by: 'att' }, mix: { senior: 1.4, older: 1.3, fresh: 0.6 } },
   food: { post: 'Karatula sa harap: "HIRING: Cook / Server"', req: 'Health certificate (food handler) from the city health office', q: { q: 'Bago humawak ng pagkain, ano ang ginagawa mo? May health certificate ka ba?', ans: ['"Hugas-kamay po, hairnet, at malinis na apron. Opo, renewed po ang health card ko."', '"Naghuhugas po ng kamay. Kukuha pa lang po ako ng health card."', '"Hmm, basta malinis naman po kamay ko."'], by: 'skill' }, mix: { fresh: 1.2, senior: 1 } },
   bakery: { post: 'Paskil sa bintana ng bakery: "WANTED: Panadero"', req: 'Health certificate (food handler)', q: { q: 'Alas-3 ng madaling-araw ang pasok dito araw-araw. Kaya mo ba?', ans: ['"Opo, sanay po ako. Maaga po akong natutulog."', '"Kakayanin ko po, susubukan ko."', '"Ang aga po pala... baka po ma-late ako minsan."'], by: 'rel' }, mix: { senior: 1.2, older: 1.4 } },

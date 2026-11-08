@@ -2,7 +2,7 @@
    version.js holds the version; the page registers this worker with updateViaCache: 'none'. */
 importScripts('version.js');
 const CACHE = 'negosyante-' + APP_VERSION;
-const FILES = ['./', 'index.html', 'style.css', 'version.js', 'data.js', 'engine.js', 'features.js', 'approvals.js', 'audio.js', 'ui.js', 'app.webmanifest',
+const FILES = ['./', 'index.html', 'style.css', 'version.js', 'data.js', 'engine.js', 'features.js', 'approvals.js', 'industries.js', 'audio.js', 'ui.js', 'app.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'];
 
 self.addEventListener('install', (e) => {

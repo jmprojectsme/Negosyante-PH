@@ -39,6 +39,9 @@ const EXTRA_LINES = {
   food: { lechon: { name: 'Lechon kawali meal', cost: 62, price: 135, p: 0.18, work: { cook: 1.3 }, rd: 25000 }, halo: { name: 'Halo-halo', cost: 28, price: 80, p: 0.15, work: { cook: 0.5 }, rd: 15000, summer: true } },
   minimart: { coffee: { name: 'Brewed coffee & siopao', cost: 22, price: 55, p: 0.14, rd: 35000 }, rx: { name: 'OTC medicines', cost: 60, price: 75, p: 0.1, rd: 20000 } },
   laundry: { shoes: { name: 'Shoe cleaning', cost: 45, price: 250, p: 0.05, work: { attendant: 1.5 }, rd: 18000 }, comforter: { name: 'Comforter & curtains', cost: 90, price: 350, p: 0.08, work: { attendant: 1, washer: 2, dryer: 2 }, rd: 12000 } },
+  trucking: { reefer: { name: 'Cold-chain delivery (per trip)', cost: 3400, price: 9800, p: 0.15, work: { driver: 1, helper: 1, truck: 1 }, rd: 220000, u: 'trip' }, ecom: { name: 'E-commerce last-mile batch (per trip)', cost: 1900, price: 5200, p: 0.3, work: { driver: 1, helper: 1, truck: 1 }, rd: 60000, trendy: true, u: 'trip' } },
+  tech: { cloud: { name: 'Cloud migration & DevOps (per day)', cost: 900, price: 14000, p: 0.15, q: 2, work: { dev: 1 }, rd: 120000, u: 'day' }, ai: { name: 'AI chatbot integration (per dev-day)', cost: 700, price: 15000, p: 0.2, q: 2, work: { dev: 1 }, rd: 150000, trendy: true, u: 'dev-day' } },
+  energy: { ev: { name: 'EV charger 7kW', cost: 38000, price: 47000, w: 0.12, u: 'unit', imported: true, rd: 90000 }, smart: { name: 'Smart LED kit (box of 20)', cost: 6800, price: 8600, w: 0.4, u: 'box', imported: true, rd: 40000, trendy: true } },
   trading: { gatas: { name: 'Powdered milk (case)', cost: 2400, price: 2720, w: 0.5, u: 'case', rd: 20000 }, frozen: { name: 'Frozen hotdog & tocino (case)', cost: 1800, price: 2060, w: 0.4, u: 'case', rd: 60000 } }
 };
 const BASE_LINES = {};
@@ -66,6 +69,9 @@ const MARKET_NEWS = {
   food: [['Mahal ang baboy dahil sa ASF', ['ulam', 'lechon', 'silog'], 1.14], ['Bumaba ang presyo ng gulay', ['ulam', 'merienda'], 0.94], ['Rice price cap ends: tumaas ang bigas', ['ulam', 'silog', 'lechon'], 1.08], ['LPG price hike', ['ulam', 'silog', 'merienda', 'lechon'], 1.05]],
   minimart: [['Supplier promo: mas mura ang snacks', ['snacks'], 0.92], ['Tumaas ang presyo ng bigas at de lata', ['staples'], 1.08], ['Excise tax: mas mahal ang sigarilyo', ['load'], 1.06], ['Shampoo and soap price increase', ['care'], 1.07]],
   laundry: [['Meralco rate hike', ['wdf', 'self', 'comforter'], 1.08], ['Detergent wholesale sale', ['wdf', 'self', 'press'], 0.93], ['Maynilad water rate adjustment', ['wdf', 'self', 'comforter'], 1.05]],
+  trucking: [['Diesel price hike (rollback next week?)', ['metro', 'prov', 'moving', 'container', 'reefer', 'ecom'], 1.08], ['Diesel rollback', ['metro', 'prov', 'moving', 'container', 'reefer', 'ecom'], 0.94], ['Toll rate increase on NLEX/SLEX', ['prov', 'container'], 1.05], ['Truck ban hours extended in Manila', ['metro', 'container'], 1.06]],
+  tech: [['Cloud and software license prices up (dollar rate)', ['web', 'app', 'cloud', 'ai'], 1.1], ['Free credits from a cloud partner program', ['cloud', 'ai', 'web'], 0.85]],
+  energy: [['Freight rates from China went up', ['bulb', 'tube', 'panel', 'flood', 'smart'], 1.06], ['Solar panel prices drop worldwide (oversupply)', ['solar'], 0.9], ['Lithium price rebound', ['battery'], 1.08]],
   trading: [['Rice import tariff cut', ['bigas'], 0.92], ['Sugar shortage: SRA allows imports', ['asukal'], 1.15], ['Canned goods price increase (DTI approved)', ['sardinas', 'gatas'], 1.06], ['Oil price hike', ['mantika'], 1.1], ['Softdrinks price adjustment', ['softdrinks'], 1.05]]
 };
 const TRENDS = {
@@ -73,6 +79,9 @@ const TRENDS = {
   food: [['silog', 'Silog craze sa mga call center agents'], ['merienda', 'Pancit for birthdays this month'], ['halo', 'Summer heat: halo-halo season'], ['lechon', 'Lechon kawali trend sa FB']],
   minimart: [['snacks', 'New viral chips everyone wants'], ['frozen', 'Mga nanay nag-iimbak ng frozen food'], ['coffee', 'Coffee to-go habit']],
   laundry: [['wdf', 'Rainy season: walang matuyuan ng labada'], ['deliver', 'Busy workers want pickup and delivery'], ['comforter', 'Holiday cleaning: comforters and curtains']],
+  trucking: [['ecom', '11.11 / 12.12 online sales: parcel volume explodes'], ['moving', 'End of school year: lipat-bahay season'], ['prov', 'Harvest season: provincial hauling demand']],
+  tech: [['web', 'Small businesses going online'], ['ai', 'Everyone wants an AI chatbot'], ['support', 'Ransomware scare: companies want IT support']],
+  energy: [['solar', 'Meralco rate hike: households rush to solar'], ['battery', 'Brownouts in Luzon: battery backup demand'], ['bulb', 'LGU streetlight and barangay LED program']],
   trading: [['noodles', 'Typhoon season stock-up'], ['softdrinks', 'Fiesta season orders'], ['bigas', 'Panic buying before price hike']]
 };
 function monthlyMarket(d) {
@@ -97,6 +106,8 @@ const CONTRACT_OFFERS = {
   bakery: { line: 'pandesal', who: ['5 sari-sari stores sa Purok 3', 'Elementary school canteen', 'Hospital cafeteria', 'Call center pantry', 'Barangay feeding program'], qty: [20, 80], disc: [0.78, 0.88] },
   food: { line: 'ulam', who: ['BPO office: packed lunch', 'Construction site crew', 'Factory canteen', 'Church event every Sunday? No: weekday office meals', 'Barangay hall staff'], qty: [25, 90], disc: [0.8, 0.9] },
   laundry: { line: 'wdf', who: ['Boarding house (12 rooms)', 'Small hotel linens', 'Massage spa towels', 'Dormitory for nursing students'], qty: [6, 20], disc: [0.75, 0.88] },
+  trucking: { line: 'metro', who: ['Hardware chain: daily store replenishment', 'Online seller: 3PL deliveries', 'Feed mill: deliveries to farms', 'Water refilling distributor', 'Furniture shop deliveries'], qty: [1, 3], disc: [0.8, 0.9] },
+  tech: { line: 'support', who: ['BPO helpdesk overflow', 'Clinic chain IT support retainer', 'Law firm IT retainer', 'School LMS support', 'Real estate developer IT'], qty: [3, 12], disc: [0.7, 0.85] },
   minimart: { line: 'staples', who: ['Carinderia bulk order', 'Company pantry supplies', 'Barangay relief goods'], qty: [30, 90], disc: [0.88, 0.95] }
 };
 function contractOffer() {
@@ -166,13 +177,13 @@ function growthAnalysis() {
   for (const r in perCust) if (I.roles[r]) caps[r] = roleCap(r) / perCust[r];
   if (S.ind === 'food') caps.seats = L.reduce((s, l) => s + l.seats, 0) * I.turns / 0.6;
   if (S.ind === 'bakery') caps.oven = assetCount('oven') * I.ovenCap / units;
-  if (S.ind === 'laundry') { caps.washer = assetCount('washer') * I.machineCap / (perCust.washer || 1); caps.dryer = assetCount('dryer') * I.machineCap / (perCust.dryer || 1); }
+  if (I.machines) { const mc = machineCaps(false); for (const m in mc) if (perCust[m]) caps[m] = mc[m] / perCust[m]; }
   if (S.ind === 'minimart') caps.stocker = roleCap('stocker') / units;
   const traffic = L.reduce((s, l) => s + l.traffic, 0);
   const demand = Math.round(I.base * traffic * (0.55 + S.rep / 110) * MARKETING[S.policy.mkt].boost);
   const capNow = Math.min(...Object.values(caps));
   const served = Math.min(demand, capNow);
-  const names = { seats: 'Seats', oven: 'Oven space', washer: 'Washers', dryer: 'Dryers' };
+  const names = { seats: 'Seats', oven: 'Oven space', washer: 'Washers', dryer: 'Dryers', truck: 'Trucks', tractor: 'Prime movers' };
   const limits = Object.entries(caps).map(([k, v]) => ({ k, name: names[k] || (I.roles[k] || {}).name || k, v: Math.round(v) })).sort((a, b) => a.v - b.v);
   // options
   const opts = [];
@@ -184,12 +195,12 @@ function growthAnalysis() {
     const cost = marketWage(r) * 26 * 1.13;
     opts.push({ what: `Hire 1 more ${I.roles[r].name}`, g, cost: `${pesoK(cost)}/month`, monthlyCost: cost, act: { tab: 'people', sub: 'hire', role: r } });
   }
-  const eq = { bakery: ['oven', 'mixer'], food: ['stove'], laundry: ['washer', 'dryer'], minimart: ['pos'] }[S.ind] || [];
+  const eq = { bakery: ['oven', 'mixer'], food: ['stove'], minimart: ['pos'] }[S.ind] || Object.keys(I.assets).filter((a) => (I.assets[a].machine && !I.assets[a].unlock && !(I.assets[a].mcap && I.assets[a].tier > S.locs[0])) || I.assets[a].boost);
   for (const a of eq) {
     const A = I.assets[a]; if (!A || canBuyAsset(a) === 'Max na') continue;
     let patch;
     if (a === 'oven') patch = (c) => ({ oven: c.oven + I.ovenCap / units });
-    else if (a === 'washer' || a === 'dryer') patch = (c) => ({ [a]: c[a] + I.machineCap / (perCust[a] || 1) });
+    else if (A.machine) { if (caps[A.machine] == null) continue; patch = (c) => ({ [A.machine]: c[A.machine] + (A.mcap || I.machines[A.machine]) / (perCust[A.machine] || 1) }); }
     else if (A.boost) patch = (c) => { const p = {}; for (const r in A.boost) if (c[r] != null) p[r] = c[r] * (1 + A.boost[r]); return p; };
     else continue;
     const g = gain(tryCaps(patch));

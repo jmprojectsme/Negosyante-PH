@@ -115,7 +115,7 @@ function balanceSheet() {
   const ni = r2(-Object.keys(S.gl).filter((a) => isPL(+a)).reduce((s, a) => s + S.gl[a], 0));   // current year earnings (not yet closed)
   const ca = [[1000, g(1000)], [1100, g(1100)], [1110, g(1110)], [1200, g(1200)], [1300, g(1300)], [1310, g(1310)]].filter((x) => x[1]);
   const nca = [[1400, g(1400)], [1500, g(1500)], [1510, g(1510)]].filter((x) => x[1]);
-  const cl = [2000, 2100, 2110, 2120, 2130, 2140, 2150, 2160, 2170, 2180].map((a) => [a, -g(a)]).filter((x) => x[1]);
+  const cl = [2000, 2100, 2110, 2120, 2130, 2140, 2150, 2160, 2170, 2180, 2190].map((a) => [a, -g(a)]).filter((x) => x[1]);
   const ncl = [[2200, -g(2200)]].filter((x) => x[1]);
   const eq = [[3000, -g(3000)], [3100, -g(3100)], [3200, -g(3200)]].filter((x) => x[1]);
   const sum = (arr) => arr.reduce((s, x) => s + x[1], 0);
@@ -170,6 +170,7 @@ function newGame(o) {
   if (o.ind === 'minimart') S.assets.push({ id: uid(), key: '_fit', cost: 60000, life: 60, bought: S.day, name: 'Shelves & fixtures' });
   if (o.ind === 'food' || o.ind === 'bakery') S.assets.push({ id: uid(), key: '_fit', cost: 40000, life: 60, bought: S.day, name: 'Kitchen tools & furniture' });
   payRent(true);
+  if (I.fx) S.fx = 58.6;
   if (I.channel === 'b2b') {
     for (let i = 0; i < 5; i++) S.clients.push(makeClient('small'));
     for (let i = 0; i < 3; i++) S.clients.push(makeClient('medium'));
@@ -177,9 +178,9 @@ function newGame(o) {
   }
   // starter stock so day one is playable
   if (I.mode === 'stock') {
-    const target = I.channel === 'b2b' ? { bigas: 25, sardinas: 10, noodles: 20, mantika: 8, softdrinks: 15, kape: 6, asukal: 3, sabon: 8 } : null;
+    const target = I.channel === 'b2b' ? (I.starter || { bigas: 25, sardinas: 10, noodles: 20, mantika: 8, softdrinks: 15, kape: 6, asukal: 3, sabon: 8 }) : null;
     for (const k in I.lines) {
-      const n = target ? target[k] : Math.round(I.base * I.lines[k].p * (I.lines[k].q || 1) * 4);
+      const n = target ? (target[k] || 0) : Math.round(I.base * I.lines[k].p * (I.lines[k].q || 1) * 4);
       buyStock(k, n, true);
     }
   }
@@ -227,6 +228,15 @@ function inbox(from, title, body, act) { S.inbox.unshift({ id: uid(), d: S.day, 
 function queue(ev) { ev.id = ev.id || uid(); S.queue.push(ev); }
 
 // ---------- assets & locations ----------
+// machines (washers, trucks...): capacity per type, skipping broken ones
+function machineCaps(today) {
+  const I = IND(), caps = {}; if (!I.machines) return caps;
+  for (const m in I.machines) caps[m] = 0;
+  const bo = today && S.brownoutToday && !assetFlag('power') && !I.noBrownout ? 0.5 : 1;
+  for (const a of S.assets) { const A = I.assets[a.key]; if (A && A.machine && !(today && a.broken)) caps[A.machine] += (A.mcap || I.machines[A.machine]) * bo; }
+  return caps;
+}
+const machineCount = () => S.assets.filter((a) => (IND().assets[a.key] || {}).machine).length;
 function assetCount(key) { return S.assets.filter((a) => a.key === key).length; }
 function hasAsset(key) { return S.assets.some((a) => a.key === key); }
 function assetFlag(f) { return S.assets.reduce((m, a) => { const d = IND().assets[a.key]; return d && d[f] ? Math.max(m, d[f]) : m; }, 0); }
@@ -243,7 +253,7 @@ function canBuyAsset(key) {
   const tier = Math.max(...S.locs);
   if (A.tier && tier < A.tier) return 'Needs a bigger location';
   if (A.vehicle) { const slots = S.locs.reduce((s, t) => s + (IND().locations[t].slots || 0), 0); if (vehicles().length >= slots) return 'No parking/slot left'; }
-  if (A.machine) { const slots = S.locs.reduce((s, t) => s + (IND().locations[t].slots || 0), 0); if (assetCount('washer') + assetCount('dryer') >= slots) return 'No space for more machines'; }
+  if (A.machine) { const slots = S.locs.reduce((s, t) => s + (IND().locations[t].slots || 0), 0); if (machineCount() >= slots) return 'No space for more machines'; }
   if (A.oven) { const slots = S.locs.reduce((s, t) => s + (IND().locations[t].ovens || 0), 0); if (assetCount('oven') >= slots) return 'No space for another oven'; }
   if (!A.service && cash() < A.cost) return 'Kulang ang cash';
   if (A.cost >= 300000 && S.board.conf < 45 && !capexApproved()) return 'Needs board approval (confidence 45+)';
@@ -435,9 +445,10 @@ const CLIENT_TYPES = {
   large: { size: 36, freq: 4, terms: [15, 30], label: 'Minimart / grocery' },
   chain: { size: 90, freq: 3, terms: [30], label: 'Chain / institutional' }
 };
+const CT = () => IND().clientTypes || CLIENT_TYPES;
 function makeClient(type) {
-  const T = CLIENT_TYPES[type], used = new Set(S.clients.map((c) => c.name));
-  let name = pick(STORE_NAMES); for (let i = 0; i < 20 && used.has(name); i++) name = pick(STORE_NAMES) + ' ' + irnd(2, 9);
+  const T = CT()[type], used = new Set(S.clients.map((c) => c.name)), NM = IND().clientNames || STORE_NAMES;
+  let name = pick(NM); for (let i = 0; i < 20 && used.has(name); i++) name = pick(NM) + ' ' + irnd(2, 9);
   const prefs = {}; for (const k in IND().lines) prefs[k] = IND().lines[k].w * rnd(0.5, 1.5);
   return { id: uid(), name, type, terms: pick(T.terms), rel: clamp(rnd(0.75, 0.99) - (type === 'small' ? 0.05 : 0), 0.55, 0.99), sens: rnd(2, 5), loyal: 55, prefs, since: S.day, bought: 0, overdue: 0, visited: 0 };
 }
@@ -468,6 +479,7 @@ function simDay() {
   if (open) {
     if (I.channel === 'b2b') { dayB2B(d, R); if (S.policy.autoReorder) autoPO(); } else dayWalkin(d, R);
   }
+  industryDaily(d);
   if (S.ar.length) collections(d, R);
   if (I.mode === 'prep') ageLots(R);
   dailyCosts(d, open, R);
@@ -595,7 +607,7 @@ function dayWalkin(d, R) {
     custCap = Math.min(cas > 0 ? srv : srv * 0.8, L.reduce((s, l) => s + l.seats, 0) * I.turns / 0.6, cas > 0 ? cas : Infinity);   // about 40% take out (pa-balot), no seat needed
   } else if (S.ind === 'bakery') custCap = capacityFor('clerk');
   else if (S.ind === 'minimart') custCap = capacityFor('cashier');
-  else if (S.ind === 'laundry') custCap = Infinity;
+  else if (I.mode === 'service') custCap = Infinity;
   const served = Math.min(C, Math.floor(custCap)); const lostC = C - served;
   // morning production (prep industries) limited by cooks/bakers and ovens
   if (I.mode === 'prep') prepare(d, served);
@@ -609,7 +621,7 @@ function dayWalkin(d, R) {
   if (I.mode === 'service') {
     const need = {};
     for (const k in dem) for (const r in (I.lines[k].work || {})) need[r] = (need[r] || 0) + dem[k] * I.lines[k].work[r];
-    const caps = { washer: assetCount('washer') * I.machineCap * (S.brownoutToday && !assetFlag('power') ? 0.5 : 1), dryer: assetCount('dryer') * I.machineCap * (S.brownoutToday && !assetFlag('power') ? 0.5 : 1) };
+    const caps = machineCaps(true);
     for (const r in need) { const cap = r in caps ? caps[r] : capacityFor(r); ratio[r] = need[r] > 0 ? Math.min(1, cap / need[r]) : 1; }
   }
   let shelf = Infinity;
@@ -668,7 +680,7 @@ function dayWalkin(d, R) {
   if (S.ind === 'minimart' && S.policy.autoReorder) autoReorder();
 }
 function avgSkill() { const a = active().filter((e) => e.today && IND().roles[e.role]); return a.length ? a.reduce((s, e) => s + e.skill, 0) / a.length : 0.95; }
-function forecast(k) { const ln = IND().lines[k]; return Math.max(5, Math.round(S.demandAvg[k] || IND().base * ln.p * (ln.q || 1))); }
+function forecast(k) { const ln = IND().lines[k]; if (ln.needs && !hasAsset(ln.needs)) return 0; const v = S.demandAvg[k] || IND().base * ln.p * (ln.q || 1); return IND().mode === 'service' ? Math.round(v * 10) / 10 : Math.max(5, Math.round(v)); }
 function prepare(d, served) {
   const I = IND();
   // what we want to make
@@ -728,7 +740,7 @@ function dayB2B(d, R) {
   const I = IND(), M = mon();
   const cap = clientCapacity(), over = S.clients.length > cap;
   for (const c of S.clients) {
-    const T = CLIENT_TYPES[c.type];
+    const T = CT()[c.type];
     if (over) c.loyal -= 0.25;   // nobody visits them
     if (!chance(1 / T.freq * seasonFactor(d) ** 0.5)) continue;
     let pf = 0, pw = 0; for (const k in I.lines) { c.prefs[k] = c.prefs[k] || I.lines[k].w * rnd(0.5, 1.5); pf += c.prefs[k] * Math.pow(refPrice(k) / S.price[k], c.sens); pw += c.prefs[k]; }
@@ -821,7 +833,7 @@ function prospect() {
 function pitchChance(p) {
   let pf = 0, pw = 0; for (const k in IND().lines) { pf += p.prefs[k] * Math.pow(refPrice(k) / S.price[k], p.sens); pw += p.prefs[k]; }
   pf /= pw;
-  const termsOk = CLIENT_TYPES[p.type].terms.includes(p.terms) ? 1 : 0.7;
+  const termsOk = CT()[p.type].terms.includes(p.terms) ? 1 : 0.7;
   const fleet = vehicles().reduce((s, v) => s + IND().assets[v.key].cap, 0);
   const big = p.type === 'chain' && fleet < 150 ? 0.3 : 1;
   return clamp((0.35 + (pf - 1) * 1.5 + (S.rep - 50) / 200) * termsOk * big, 0.05, 0.9);
@@ -832,7 +844,7 @@ function collections(d, R) {
   const boost = 1 + Math.min(0.3, collectors * 0.06) + assetFlag('collect');
   for (const a of S.ar) {
     if (a.due > d) continue;
-    const c = S.clients.find((x) => x.id === a.c) || (S.contracts || []).find((x) => x.id === a.c) || { rel: 0.5, name: 'Former client', loyal: 0 };
+    const c = S.clients.find((x) => x.id === a.c) || (S.contracts || []).find((x) => x.id === a.c) || (S.projects || []).find((x) => x.id === a.c) || { rel: 0.5, name: 'Former client', loyal: 0 };
     const late = d - a.due;
     if (chance(clamp(c.rel * boost * (late === 0 ? 0.85 : 0.25), 0, 0.97))) {
       const amt = a.amt - a.paid;
@@ -848,7 +860,7 @@ function collections(d, R) {
 function dailyCosts(d, open, R) {
   const I = IND();
   if (open) {
-    const base = { trading: 300, food: 360, bakery: 480, minimart: 450, laundry: 150 }[S.ind] * S.locs.reduce((s, t) => s + [1, 1.9, 3.8][t], 0);
+    const base = ({ trading: 300, food: 360, bakery: 480, minimart: 450, laundry: 150, trucking: 250, tech: 420, energy: 320 }[S.ind] || 300) * S.locs.reduce((s, t) => s + [1, 1.9, 3.8][t], 0);
     S.utilAcc += base * (S.brownoutToday ? 0.7 : 1) + (S.brownoutToday && assetFlag('power') ? 900 : 0);
   }
   // free lunch perk
@@ -1007,6 +1019,7 @@ function monthStart(d) {
     else inbox('Board', `Monthly report for ${ymLabel(prev)}`, 'Please send the monthly financial report by the 10th. (A bookkeeper would prepare it for you.)', { kind: 'report', k: prev });
   }
   monthlyMarket(d);
+  industryMonthly(d);
   approvalsMonthly(d);
   S.offers = (S.offers || []).filter((o) => o.exp >= d);
   if (S.stage >= 2 && IND().channel === 'walkin' && chance(0.7)) { const o = contractOffer(); if (o) { S.offers.push(o); recommendContract(o); inbox('Sales', `Supply contract offer: ${o.name}`, `${o.qty} ${IND().lines[o.line].name} every working day at ${peso(o.price)} each, ${o.terms}-day terms, for ${o.months} months. Decide in Ops \u2192 Contracts before ${fshort(o.exp)}.`); } }
@@ -1308,12 +1321,12 @@ function events(d, open, R) {
   if (r < 0.018) { robbery(); return; }
   if (r < 0.021 && S.assets.some((a) => !IND().assets[a.key] || !IND().assets[a.key].service)) { breakdown(); return; }
   if (r < 0.024 && (S.ind === 'food' || S.ind === 'bakery')) { queue({ type: 'inspect' }); return; }
-  if (r < 0.028 && I.channel === 'walkin' && S.ind !== 'laundry') { queue({ type: 'bigorder', qty: irnd(60, 200) }); return; }
+  if (r < 0.028 && I.channel === 'walkin' && I.mode !== 'service') { queue({ type: 'bigorder', qty: irnd(60, 200) }); return; }
   if (r < 0.031 && I.channel === 'b2b' && S.ar.length) { const a = pick(S.ar); queue({ type: 'bounce', ar: a.id }); return; }
   if (r < 0.034) { const w = active().filter((e) => e.female && e.status !== 'leave' && e.age <= 40 && !(e.lastLeave > d - 400)); if (w.length && chance(0.12)) { const e = pick(w); e.lastLeave = d; queue({ type: 'maternity', emp: e.id }); return; } }
   if (r < 0.036 + 0.004 * headcount() / 10 + (S.flags.complaintRisk || 0) * 0.02 && headcount() >= 2) { queue({ type: 'dole' }); S.flags.complaintRisk = Math.max(0, (S.flags.complaintRisk || 0) - 0.2); return; }
-  if (r < 0.06 && I.channel === 'walkin' && S.ind !== 'laundry' && dow(d) !== 0 && (dom(d) === 15 || dom(d) === 30 || chance(0.25))) { queue({ type: 'rush' }); return; }
-  if (r < 0.07 && (S.shortage || chance(0.25))) { queue({ type: 'cashcount' }); return; }
+  if (r < 0.06 && I.channel === 'walkin' && I.mode !== 'service' && dow(d) !== 0 && (dom(d) === 15 || dom(d) === 30 || chance(0.25))) { queue({ type: 'rush' }); return; }
+  if (r < 0.07 && !['trucking', 'tech'].includes(S.ind) && (S.shortage || chance(0.25))) { queue({ type: 'cashcount' }); return; }
   if (r < 0.075 && I.channel === 'b2b') { queue({ type: 'negotiate' }); return; }
   if (S.vat === false && S.vatWarned && d - S.vatSince > 60 && chance(0.01)) { queue({ type: 'birAudit' }); }
 }
