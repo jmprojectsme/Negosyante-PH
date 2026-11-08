@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d3a">
+<title>Negosyante PH: Business Simulator</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Negosyante">
+</head>
+<body>
+<div id="app" class="hide">
+  <header id="top">
+    <div class="co"><b id="coName">Company</b><small id="coDate">Lun, Ene 4, 2027</small><button type="button" id="coStage" class="stagechip">Stage 1</button></div>
+    <button type="button" id="btnHelp" aria-label="How to play">?</button>
+    <div class="money"><small>Cash</small><b id="coCash">&#8369;0</b></div>
+  </header>
+  <main id="view"></main>
+  <div id="playbar">
+    <button type="button" id="btnAuto" class="ghost" aria-label="Auto play">&#9654;&#9654; Auto</button>
+    <button type="button" id="btnNext" class="primary">Next day &#9654;</button>
+  </div>
+  <nav id="nav">
+    <button type="button" data-tab="home" class="on"><span>&#127968;</span>Home</button>
+    <button type="button" data-tab="ops"><span>&#128230;</span>Ops</button>
+    <button type="button" data-tab="people"><span>&#128101;</span>Tao</button>
+    <button type="button" data-tab="books"><span>&#128210;</span>Books</button>
+    <button type="button" data-tab="company"><span>&#127963;</span>Board</button>
+  </nav>
+</div>
+
+<div id="title" class="screen">
+  <div class="hero">
+    <div class="logo">&#127991;</div>
+    <h1>Negosyante PH</h1>
+    <p>Start small, hire people, follow the law, keep the books, and answer to your board.</p>
+  </div>
+  <div class="stack">
+    <button type="button" class="primary big hide" id="btnContinue">Ituloy ang negosyo</button>
+    <button type="button" class="primary big" id="btnNew">Bagong negosyo</button>
+  </div>
+  <p class="fine">Labor and tax rules follow Philippine law as of late 2026 (NCR wage order, SSS, PhilHealth, Pag-IBIG, BIR, EOPT Act). Simplified for the game: not legal advice.</p>
+</div>
+
+<div id="setup" class="screen hide"></div>
+
+<div id="modal" class="hide"><div class="sheet" id="sheet"></div></div>
+<div id="toast" class="hide"></div>
+<div id="updBar" class="hide">May bagong version! <button type="button" id="btnUpd">I-update</button></div>
+
+<script src="version.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="features.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
