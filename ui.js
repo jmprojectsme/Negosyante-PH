@@ -605,7 +605,7 @@ function caseStageText(c) { return { open: 'Decide next step', nte: `Waiting for
 function peopleCases(V) {
   const C = card('HR cases');
   if (!S.cases.length) C.appendChild(el('<div class="empty">No cases. Peaceful workplace. \u{1F60C}</div>'));
-  for (const c of S.cases.slice().reverse()) { const e = S.emps.find((x) => x.id === c.emp); C.appendChild(row(`<span class="t">${esc(e ? e.name : 'Former employee')} · ${c.type === 'awol' ? 'AWOL' : 'Cash shortage'}</span><small>${caseStageText(c)}${c.filed ? ' · <span class="neg">complaint filed</span>' : ''}</small>`, null, { tap: () => caseScene(c.id), em: c.stage === 'closed' ? '\u{1F4C2}' : '\u{1F4C1}' })); }
+  for (const c of S.cases.slice().reverse()) { const e = S.emps.find((x) => x.id === c.emp); C.appendChild(row(`<span class="t">${esc(e ? e.name : 'Former employee')} · ${c.type === 'awol' ? 'AWOL' : c.type === 'absent' ? 'Habitual absences' : 'Cash shortage'}</span><small>${caseStageText(c)}${c.filed ? ' · <span class="neg">complaint filed</span>' : ''}</small>`, null, { tap: () => caseScene(c.id), em: c.stage === 'closed' ? '\u{1F4C2}' : '\u{1F4C1}' })); }
   V.appendChild(C);
   V.appendChild(el('<div class="note b">Philippine due process for just causes (AWOL, theft): 1) Notice to Explain with at least 5 days to reply, 2) a chance to be heard, 3) a written Notice of Decision. Skipping it can cost you damages even when the cause is valid.</div>'));
 }
@@ -870,7 +870,7 @@ const HANDLERS = {
       { label: 'Huwag muna', sub: 'Risky: a BIR audit can come any time', fn: closeS }] }),
   terms: () => { const lim = Math.round(S.supplier.bought * 0.25 / 10000) * 10000 || 100000; scene({ em: '\u{1F91D}', title: 'Supplier offers credit terms', body: `Your supplier is happy with your orders. They offer 30-day terms up to ${peso(lim)}. Pay late and they cut you off.`, choices: [{ label: 'Accept 30-day terms', cls: 'primary', fn: () => { S.supplier.terms = true; S.supplier.limit = lim; done('Credit line open', 'Use the "30d" buttons in Ops → Stock. Bills appear in Books → Compliance.'); } }, { label: 'No thanks, cash lang', fn: closeS }] }); },
   regularize: (ev) => { const e = empOf(ev.emp); if (!e || e.status !== 'probi') return closeS(); const days = S.day - e.hired; scene({ em: roleDef(e.role).em, title: `Probation review: ${esc(e.name)}`, sub: `${roleDef(e.role).name} · ${days} days employed`,
-    nodes: [meter('Skill', e.skill * 70, 100), meter('Morale', e.morale, 100), el(`<div class="note b">Absences: ${e.absences} · Warnings: ${e.warnings}. Probation ends at 6 months; after that they become regular automatically and can only be dismissed for just or authorized cause.</div>`)],
+    nodes: [meter('Skill', e.skill * 70, 100), meter('Morale', e.morale, 100), el(`<div class="note b">${absText(e).line}\nProbation ends at 6 months; after that they become regular automatically and can only be dismissed for just or authorized cause.</div>`), ...(hrOfficer() ? [el(`<div class="note g"><b>\u{1F4C1} HR (${esc(hrOfficer().name)}) recommends:</b> ${(() => { const t = absText(e); return t.a.noshow >= 3 || t.rate > Math.max(0.08, (t.tr || 0.04) * 2) ? 'end probation: attendance below the standard set at hiring' : e.skill < 0.7 ? 'end probation: performance below standard' : 'regularize: meets the standards'; })()}.</div>`)] : [])],
     choices: [{ label: 'Regularize', sub: 'Morale +10', cls: 'primary', fn: () => { e.status = 'regular'; e.regular = true; e.morale = clamp(e.morale + 10, 0, 100); done(`${esc(e.name)} is now regular`, 'Congratulations sent. \u{1F389}'); } },
       { label: 'End probation: did not meet the standards', sub: 'Legal if the standards were explained on day one (they were). Final pay due in 30 days.', cls: 'warn', fn: () => { separate(e, 'probation ended'); done('Probation ended', `${esc(e.name)} was informed in writing. Release the final pay within 30 days.`); } }] }); },
   resign: (ev) => { const e = empOf(ev.emp); if (!e) return closeS(); scene({ em: '\u{1F4E8}', title: `${esc(e.name)} is resigning`, sub: `${roleDef(e.role).name} · last day ${fshort(e.leaveOn)}`, body: `"Salamat po sa lahat, pero may nakita po akong mas magandang offer."\n\nMorale was ${Math.round(e.morale)}. They gave the 30-day notice the law requires.`,
@@ -893,15 +893,43 @@ const HANDLERS = {
   collect: (ev) => collectScene(ev.ar),
   writeoff: (ev) => { const a = S.ar.find((x) => x.id === ev.ar); if (!a) return closeS(); const c = S.clients.find((x) => x.id === a.c); const amt = Math.round(a.amt - a.paid); scene({ em: '\u{1F4C9}', title: 'Uncollectible account?', body: `${esc(c ? c.name : 'A former client')} owes ${peso(amt)}, over 120 days overdue. Write it off as a bad debt?`, choices: [{ label: 'Write off', sub: 'Dr Bad Debts, Cr Accounts Receivable', cls: 'primary', fn: () => { post(`Bad debt written off: ${c ? c.name : ''}`, [[6190, amt], [1100, -amt]]); a.paid = a.amt; a.closed = true; S.ar = S.ar.filter((x) => x !== a); if (c) { c.gone = true; S.clients = S.clients.filter((x) => x !== c); } done('Written off', `${peso(amt)} moved to bad debts expense.`); } }, { label: 'Keep trying to collect', fn: closeS }] }); },
   board: (ev) => boardScene(ev),
+  hrreport: (ev) => hrReportScene(ev),
   stage: (ev) => { const st = STAGES[ev.n - 1]; scene({ em: st.em, title: `Yugto ${st.n}: ${st.name}!`, sub: esc(S.company), body: `${st.desc}\n\nUnlocked: ${st.unlock}\n\nReputation +3${S.board.none ? '' : ', board confidence +6'}.`, choices: [{ label: 'Tuloy ang laban!', cls: 'primary', fn: closeS }] }); },
   yearend: (ev) => yearScene(ev.y)
 };
 
+// --- attendance: breakdown and team average ---
+function absText(e) {
+  const a = e.abs || { sick: e.absences || 0, noshow: 0, sil: 0 };
+  const days = Math.max(1, S.day - Math.max(e.hired, e.startOn || e.hired));
+  const work = Math.round(days * 6 / 7), rate = (a.sick + a.noshow) / Math.max(1, work);
+  const team = active().filter((x) => x !== e && x.abs), tr = team.length ? team.reduce((s, x) => s + (x.abs.sick + x.abs.noshow) / Math.max(1, Math.round((S.day - Math.max(x.hired, x.startOn || x.hired)) * 6 / 7)), 0) / team.length : null;
+  return { a, work, rate, tr, line: `Attendance over ${work} working days: ${a.sick} sick (called in${a.sil ? `, ${a.sil} paid from SIL` : ''}) \u00b7 ${a.noshow} no-call no-show \u00b7 absence rate ${(rate * 100).toFixed(1)}%${tr != null ? ` (team average ${(tr * 100).toFixed(1)}%)` : ''} \u00b7 warnings ${e.warnings}` };
+}
+// HR brings the facts and a recommendation; the owner decides
+function hrReportScene(ev) {
+  const e = empOf(ev.emp); if (!e || e.status === 'gone') return closeS();
+  const h = hrOfficer();
+  const rec = ev.noshow >= 3 || (ev.noshow >= 2 && e.warnings >= 1) ? 'nte' : ev.noshow >= 1 ? 'written' : 'verbal';
+  const recText = { nte: 'Issue a Notice to Explain (possible habitual absenteeism, a just cause if it continues after warnings)', written: 'Give a written warning: no-call no-shows break company rules', verbal: 'Coaching talk only: the absences were sick days with notice, which are not misconduct' }[rec];
+  const act = (k) => () => {
+    if (k === 'verbal') { e.rel = Math.min(0.99, e.rel + 0.01); e.morale = clamp(e.morale - 1, 0, 100); done('Coaching done', `${esc(e.name)}: "Pasensya na po, aayusin ko po." Logged in the 201 file.`); }
+    else if (k === 'written') { e.warnings++; e.rel = Math.min(0.99, e.rel + 0.02); e.morale = clamp(e.morale - 4, 0, 100); done('Written warning issued', `${esc(e.name)} signed the warning. Warnings on file: ${e.warnings}.`); }
+    else if (k === 'nte') { openCase(e, 'absent', { sick: ev.sick, noshow: ev.noshow }); const c = S.cases[S.cases.length - 1]; if (c && c.emp === e.id && c.stage === 'open') { caseAction(c.id, 'nte'); S.queue = S.queue.filter((q) => !(q.type === 'case' && q.case === c.id)); done('NTE served', `HR served the Notice to Explain to ${esc(e.name)}. They have ${LAW.nteDays} days to reply. The case is in Tao \u2192 HR cases.`, '\u{1F4E8}'); } else closeS(); }
+    else { e.morale = clamp(e.morale + 1, 0, 100); done('No action', 'Noted. HR will keep monitoring.'); }
+  };
+  scene({ em: '\u{1F4C1}', title: `HR report: ${esc(e.name)}`, sub: `${roleDef(e.role).name} \u00b7 prepared by ${h ? esc(h.name) : 'HR'} \u00b7 ${ymLabel(ev.k)}`,
+    nodes: [el(`<div class="note b"><b>Facts</b>\nThis month: ${ev.sick} sick day(s) with notice, ${ev.noshow} no-call no-show(s).\n${absText(e).line}</div>`), el(`<div class="note g"><b>HR recommends:</b> ${recText}.</div>`)],
+    choices: [
+      { label: `Approve: ${rec === 'nte' ? 'issue the NTE' : rec === 'written' ? 'written warning' : 'coaching talk'}`, cls: 'primary', fn: act(rec) },
+      ...['verbal', 'written', 'nte'].filter((k) => k !== rec).map((k) => ({ label: { verbal: 'Coaching talk only', written: 'Written warning instead', nte: 'Issue a Notice to Explain instead' }[k], fn: act(k) })),
+      { label: 'No action this time', fn: act('none') }] });
+}
 // --- employee detail ---
 function empScene(e) {
   const R = roleDef(e.role), days = S.day - e.hired;
   const nodes = [meter('Morale', e.morale, 100), meter('Skill', e.skill * 70, 100),
-    el(`<div class="note b">${esc(R.name)} · hired ${fdate(e.hired)} (${days} days) · ${payLabel(e.rate)}${rateIsMWE(e) ? ' (minimum wage earner, tax-exempt)' : ''}\n${e.prof ? esc(e.prof) + ' · ' : ''}learns ${e.learn > 1.5 ? 'fast' : e.learn > 0.9 ? 'normally' : 'slowly'}\nAbsences ${e.absences} · warnings ${e.warnings} · SIL left ${e.sil}${e.adv ? ` · cash advance balance ${peso(e.adv)}` : ''}${e.registered ? '' : '\n⚠ Not registered with SSS/PhilHealth/Pag-IBIG'}</div>`)];
+    el(`<div class="note b">${esc(R.name)} · hired ${fdate(e.hired)} (${days} days) · ${payLabel(e.rate)}${rateIsMWE(e) ? ' (minimum wage earner, tax-exempt)' : ''}\n${e.prof ? esc(e.prof) + ' · ' : ''}learns ${e.learn > 1.5 ? 'fast' : e.learn > 0.9 ? 'normally' : 'slowly'}\n${absText(e).line} · SIL left ${e.sil}${e.adv ? ` · cash advance balance ${peso(e.adv)}` : ''}${e.registered ? '' : '\n⚠ Not registered with SSS/PhilHealth/Pag-IBIG'}</div>`)];
   const ch = [
     { label: `Raise +₱25/day (to ${peso(e.rate + 25)})`, sub: 'Morale up. Pay can never go down again (non-diminution of benefits).', fn: () => { e.rate += 25; e.attMod = (e.attMod || 0) + 2; save(); empScene(e); } },
     { label: 'Training (₱3,500)', sub: 'Skill +8%', fn: () => { if (cash() < 3500) return toast('Kulang ang cash'); post(`Training: ${e.name}`, [[6210, 3500], [1000, -3500]]); e.skill = Math.min(1.4, e.skill + 0.08); e.morale = clamp(e.morale + 3, 0, 100); save(); empScene(e); } },
@@ -1027,12 +1055,13 @@ function offerScene(a, rate, countered) {
 function caseScene(id) {
   const c = S.cases.find((x) => x.id === id), e = c && empOf(c.emp); if (!c) return closeS();
   const nodes = [el(`<div class="note b">${c.log.map(esc).join('\n')}</div>`)];
+  if (c.type === 'absent' && e) nodes.push(el(`<div class="note">${absText(e).line}</div>`));
   if (c.reply && ['reply', 'heard'].includes(c.stage)) nodes.push(el(`<div class="speech">Written explanation: "${esc(c.reply)}"</div>`));
   if (c.type === 'theft') nodes.push(el(`<div class="note ${c.evidence ? 'g' : 'y'}">Evidence: ${c.evidence ? 'CCTV / POS records show the shortage on their shift.' : 'Only the cash count. Weak evidence.'}</div>`));
   const ch = [];
   const name = e ? esc(e.name) : 'the employee';
   if (c.stage === 'open') {
-    ch.push({ label: 'Send a Notice to Explain (NTE)', sub: `Due process: they get ${LAW.nteDays} calendar days to answer in writing`, cls: 'primary', fn: () => { const m = caseAction(id, 'nte'); done('NTE sent', m, '\u{1F4E8}'); } });
+    ch.push({ label: c.hrDraft ? 'Approve the NTE prepared by HR' : 'Send a Notice to Explain (NTE)', sub: c.hrDraft ? `HR serves it today. ${LAW.nteDays} calendar days to answer in writing.` : `Due process: they get ${LAW.nteDays} calendar days to answer in writing`, cls: 'primary', fn: () => { const m = caseAction(id, 'nte'); done('NTE sent', m, '\u{1F4E8}'); } });
     ch.push({ label: 'Text them: "Huwag ka nang bumalik!"', sub: 'Fire immediately, no notice, no hearing', cls: 'danger', fn: () => { const m = caseAction(id, 'firenow'); done('Tinanggal', m, '\u{1F4F1}'); } });
     if (c.type === 'awol' && c.returned) ch.push({ label: 'They came back: closeS with a written warning', fn: () => { done('Warning given', caseAction(id, 'warn')); } });
     ch.push({ label: 'Decide later', fn: closeS });
@@ -1047,12 +1076,13 @@ function caseScene(id) {
   } else {
     ch.push({ label: 'Close', fn: closeS });
   }
-  scene({ em: '\u{1F4C1}', title: `${c.type === 'awol' ? 'AWOL' : 'Cash shortage'}: ${name}`, sub: caseStageText(c), nodes, choices: ch });
+  scene({ em: '\u{1F4C1}', title: `${c.type === 'awol' ? 'AWOL' : c.type === 'absent' ? 'Habitual absences' : 'Cash shortage'}: ${name}`, sub: caseStageText(c), nodes, choices: ch });
 }
 function hearingScene(c, e, asked) {
   asked = asked || [];
   const truth = c.type === 'awol' ? caseReasonText(c) : (e && e.hon < 0.3 ? 'Nanginginig siya. "Pasensya na po, babayaran ko po..."' : '"Hindi ko po kinuha. Baka mali lang ang sukli na naibigay ko."');
-  const Q = c.type === 'awol'
+  const Q = c.type === 'absent' ? [{ id: 'why', q: 'Bakit madalas kang absent nitong buwan?', a: e && e.rel > 0.85 ? 'Nagkasakit po ang anak ko at bumaha sa amin. May medical certificate po.' : 'Malayo po kasi, minsan napupuyat ako.' }, { id: 'doc', q: 'May dokumento ka ba para sa mga absences?', a: e && e.rel > 0.85 ? 'Ipinakita ang medical certificate at barangay certificate (baha).' : 'Wala po.' }, { id: 'plan', q: 'Ano ang gagawin mo para hindi na maulit?', a: e && e.att > 0.5 ? '"Magpapaalam po ako agad at aagahan ko ang alis."' : '"Susubukan ko po."' }]
+    : c.type === 'awol'
     ? [{ id: 'proof', q: 'May patunay ka ba? (medical certificate, ticket, etc.)', a: c.reason === 'hospital' ? 'Ipinakita ang medical certificate mula sa ospital.' : c.reason === 'province' ? 'Ipinakita ang bus ticket at death certificate ng tatay.' : 'Wala pong maipakita.' }, { id: 'intent', q: 'Gusto mo pa bang magtrabaho dito?', a: c.reason === 'newjob' ? '"Ah, may iba na po akong trabaho."' : '"Opo, kailangan ko po ang trabaho!"' }, { id: 'why', q: 'Bakit hindi ka man lang nag-text?', a: c.reason === 'hospital' ? '"Naka-confine po ako, walang makapag-text."' : c.reason === 'province' ? '"Walang signal po sa amin."' : '"Nakalimutan ko po."' }]
     : [{ id: 'cctv', q: 'Panoorin natin ang CCTV / POS log.', a: c.evidence ? 'Kita sa CCTV ang pagkuha ng pera sa drawer.' : 'Walang malinaw na kuha.' }, { id: 'side', q: 'Ano ang paliwanag mo?', a: truth }, { id: 'others', q: 'Sino pa ang humawak ng kaha?', a: '"Kami lang po ni ate kanina."' }];
   const nodes = [el('<div class="note b">Administrative conference. The employee may bring a representative. You listen before you decide.</div>')];
@@ -1273,8 +1303,10 @@ function setupPWA() {
       reg.addEventListener('updatefound', () => { const w = reg.installing; w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); }); });
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
     }).catch(() => {});
+    // reload only when an update replaces a running version, not on the very first install
+    const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
   } catch (e) { /* not available here */ }
 }
 setupPWA();

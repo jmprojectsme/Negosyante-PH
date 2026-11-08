@@ -78,7 +78,7 @@ function mon(k) {
 function post(memo, lines, tag, closing) {
   lines = lines.filter((l) => Math.abs(l[1]) >= 0.005).map((l) => [l[0], r2(l[1])]);
   const sum = r2(lines.reduce((a, l) => a + l[1], 0));
-  if (Math.abs(sum) > 0.02) { console.error('Unbalanced entry', memo, lines, sum); return false; }
+  if (Math.abs(sum) > 1) { console.error('Unbalanced entry', memo, lines, sum); return false; }   // centavo rounding is absorbed below
   if (Math.abs(sum) > 0) lines[lines.length - 1][1] = r2(lines[lines.length - 1][1] - sum);
   const M = mon();
   for (const [a, v] of lines) {
@@ -509,20 +509,24 @@ function attendance(d, open, hol, R) {
     if (!open) continue;
     if (e.startOn && d < e.startOn) continue;
     if (e.noShow && d === e.startOn) { e.noShow = false; e.status = 'gone'; e.left = d; e.why = 'no-show on day one'; S.stats.quits++; inbox('HR', `Hindi sumipot si ${e.name}`, 'They accepted the offer but never came on the first day and do not answer calls. It happens. Post the job again.'); continue; }
-    const pShow = e.rel * (0.88 + 0.12 * e.morale / 100);
-    if (chance(pShow)) { e.today = true; e.streak = 0; e.p.days++; if (hol) { if (hol.type === 'R') e.p.holW++; else e.p.spec++; } continue; }
-    // absent: sick (excused), or no-call no-show
-    const r = Math.random();
-    if (r < 0.7 * sickF + 0.1) {
-      if (e.sil > 0) { e.sil--; e.p.sil++; R.notes.push(`${e.name} on sick leave (SIL)`); }
-      else { e.absences++; R.notes.push(`${e.name} absent (sick, no pay)`); }
+    // realistic absence rates: reliable ~1-2%, average ~4%, unreliable ~10%; morale and HMO lower them
+    e.abs = e.abs || { sick: 0, noshow: 0, sil: 0 }; e.mAbs = e.mAbs || { sick: 0, noshow: 0 };
+    const pAbsent = (1 - e.rel) * 0.4 * (1.4 - 0.8 * e.morale / 100) * (S.policy.perks.hmo ? 0.75 : 1);
+    if (!chance(pAbsent)) { e.today = true; e.streak = 0; e.p.days++; if (hol) { if (hol.type === 'R') e.p.holW++; else e.p.spec++; } continue; }
+    // absent: most call in sick; some just don't show up
+    if (Math.random() < 0.72) {
+      e.abs.sick++; e.mAbs.sick++;
+      if (e.sil > 0) { e.sil--; e.p.sil++; e.abs.sil++; R.notes.push(`${e.name} on sick leave (SIL)`); }
+      else { e.absences++; R.notes.push(`${e.name} called in sick (no pay)`); }
     } else {
-      e.streak++; e.absences++;
+      e.streak++; e.absences++; e.abs.noshow++; e.mAbs.noshow++;
+      if (e.rel < 0.8 && e.streak === 1 && chance(0.2)) e.streak = 3;   // some unreliable people just disappear
       if (e.streak >= 3) {
         e.status = 'awol'; S.stats.awol++;
         const reason = pick([{ k: 'hospital', p: 0.25 }, { k: 'province', p: 0.3 }, { k: 'newjob', p: 0.35 }, { k: 'none', p: 0.1 }]);
         openCase(e, 'awol', { reason: reason.k });
-        const cs = S.cases[S.cases.length - 1]; if (hrOfficer() && cs && cs.emp === e.id && cs.stage === 'open') { caseAction(cs.id, 'nte'); cs.log.push(`${fshort(d)}: (HR Officer ${hrOfficer().name} sent the NTE)`); }
+        const cs = S.cases[S.cases.length - 1];
+        if (hrOfficer() && cs && cs.emp === e.id && cs.stage === 'open') { cs.hrDraft = true; cs.log.push(`${fshort(d)}: HR Officer ${hrOfficer().name} checked the attendance logs, called the employee (no answer) and prepared a Notice to Explain for your approval`); }
       } else R.notes.push(`${e.name} did not show up (no call)`);
     }
   }
@@ -1030,6 +1034,16 @@ function monthEnd(d) {
   // 13th month reminder
   if (monthOf(d) === 11) inbox('HR', '13th month pay', `Due on or before December 24. Current accrual: ${peso(-bal(2170))}. You can pay it in Books → Compliance once December starts.`);
   if (monthOf(d) === 11) addDue('13th', `13th month pay (${yearOf(d)})`, 2170, -bal(2170), dayFromYMD(yearOf(d), 12, 24));
+  // HR reviews attendance every month and reports problems to the owner
+  for (const e of active()) {
+    const m = e.mAbs || { sick: 0, noshow: 0 };
+    if (['awol', 'leave', 'suspended'].includes(e.status) || S.cases.some((c) => c.emp === e.id && c.stage !== 'closed')) { e.mAbs = { sick: 0, noshow: 0 }; continue; }
+    if (m.noshow >= 2 || m.sick + m.noshow >= 4) {
+      if (hrOfficer()) queue({ type: 'hrreport', emp: e.id, sick: m.sick, noshow: m.noshow, k: ym(d), warnings: e.warnings });
+      else inbox('Supervisor', `Attendance problem: ${e.name}`, `${ymLabel(ym(d))}: ${m.sick} sick day(s), ${m.noshow} no-call no-show(s). With an HR Officer you would get a full report and a recommended action.`);
+    }
+    e.mAbs = { sick: 0, noshow: 0 };
+  }
   // employees: monthly morale drift from perks, regularization reminders
   for (const e of active()) {
     const days = d - e.hired;
@@ -1171,7 +1185,7 @@ function separate(e, why) {
 function openCase(e, type, info) {
   if (S.cases.some((c) => c.emp === e.id && c.stage !== 'closed')) return;
   const c = Object.assign({ id: uid(), emp: e.id, type, stage: 'open', opened: S.day, log: [] }, info || {});
-  c.log.push(`${fshort(S.day)}: ${type === 'awol' ? `${e.name} absent without leave for 3 days` : `Cash shortage of ${peso(info.amt)} traced to ${e.name}`}`);
+  c.log.push(`${fshort(S.day)}: ${type === 'awol' ? `${e.name} absent without leave for 3 days` : type === 'absent' ? `Habitual absences: ${e.name} (${info.sick || 0} sick, ${info.noshow || 0} no-call no-show this month, ${e.warnings} earlier warning(s))` : `Cash shortage of ${peso(info.amt)} traced to ${e.name}`}`);
   S.cases.push(c); S.stats.cases++;
   queue({ type: 'case', case: c.id });
 }
@@ -1195,6 +1209,7 @@ function caseReasonText(c) {
   return { hospital: 'May sakit pala: na-confine sa ospital (may medical certificate).', province: 'Umuwi sa probinsya: emergency sa pamilya, walang load para mag-text.', newjob: 'Nag-apply pala sa ibang trabaho at doon na pumasok.', none: 'Walang malinaw na dahilan.' }[c.reason] || '';
 }
 function caseReply(c, e) {
+  if (c.type === 'absent') return e.rel > 0.85 ? 'Explains the absences were real emergencies (sick child, flooding) and attaches a medical certificate. Promises it will not happen again.' : 'Says the commute is hard and sometimes oversleeps. No documents attached.';
   if (c.type === 'theft') return e.hon < 0.3 ? 'Denies taking the money; says others also handle the cash drawer.' : 'Says the shortage was a counting mistake and offers to pay it back.';
   return caseReasonText(c);
 }
@@ -1226,7 +1241,7 @@ function caseAction(id, act) {
   if (act === 'dismiss') {
     const heard = ['reply', 'noreply', 'heard'].includes(c.stage);
     c.stage = 'closed'; c.closedOn = S.day; c.outcome = 'Dismissed after due process';
-    c.validCause = c.type === 'theft' ? !!c.evidence || e.hon < 0.3 : ['newjob', 'none'].includes(c.reason) || (c.reason === 'province' && !c.returned);
+    c.validCause = c.type === 'theft' ? !!c.evidence || e.hon < 0.3 : c.type === 'absent' ? e.warnings >= 2 && e.rel <= 0.85 : ['newjob', 'none'].includes(c.reason) || (c.reason === 'province' && !c.returned);
     c.badProcess = !heard;
     c.risk = c.validCause ? (c.badProcess ? 0.5 : 0.05) : 0.7;
     separate(e, 'dismissed'); c.log.push(`${fshort(S.day)}: Notice of Decision: dismissal served`);
