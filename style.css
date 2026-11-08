@@ -127,6 +127,9 @@ table.fs tr.i td:first-child { padding-left: 14px; }
 .ind b { display: block; } .ind small { display: block; }
 .chart { display: flex; align-items: flex-end; gap: 3px; height: 70px; } .chart i { flex: 1; background: var(--pri); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; } .chart i.n { background: var(--bad); }
 
+#btnMenu { width: 34px; height: 34px; padding: 0; border-radius: 50%; background: rgba(255,255,255,.15); color: #fff; font-size: 17px; flex: none; margin-left: auto; }
+#btnMenu + #btnHelp { margin-left: 0; }
+#btnContinue small { display: block; font-weight: 500; font-size: 13px; opacity: .85; margin-top: 2px; }
 #btnHelp { width: 34px; height: 34px; padding: 0; border-radius: 50%; background: rgba(255,255,255,.15); color: #fff; font-size: 17px; flex: none; margin-left: auto; }
 .quest { display: grid; gap: 4px; padding: 9px 10px; border-radius: 12px; background: #f7f4ec; }
 .quest.cur { background: #e8f5f2; border: 1.5px solid #9fd6cc; }

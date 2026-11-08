@@ -6,10 +6,11 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 // in-page confirmation (the artifact frame blocks window.confirm)
 function ask(msg, fn) { scene({ em: '\u2753', title: 'Sigurado ka?', body: esc(msg), choices: [{ label: 'Oo, ituloy', cls: 'primary', fn: () => { const before = UI.scene; fn(); if (UI.scene === before) closeS(); } }, { label: 'Huwag na', fn: closeS }] }); }
 function askT(msg, fn) { $('modal').classList.remove('hide'); scene({ em: '\u2753', title: 'Sigurado ka?', body: esc(msg), choices: [{ label: 'Oo', cls: 'primary', fn: () => { $('modal').classList.add('hide'); fn(); } }, { label: 'Huwag na', fn: () => $('modal').classList.add('hide') }] }); }
-function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* storage blocked */ } }
+function wipeSave() { if (S && S.slot) deleteSlot(S.slot); }
 const UI = { tab: 'home', sub: { ops: null, people: 'staff', books: 'rep', company: 'board' }, period: 'month', auto: false, timer: null, scene: null };
 let toastT = 0;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('hide'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hide'), 2600); }
+function toast(msg) {
+  if (/^(Kulang|Hindi|Max|Puno|Save failed)/.test(msg)) sfx('bad'); const t = $('toast'); t.textContent = msg; t.classList.remove('hide'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hide'), 2600); }
 // daily rate and its monthly equivalent (6-day week: daily x 313 / 12, the DOLE formula)
 const perMonth = (d) => Math.round(d * 313 / 12);
 const payLabel = (d) => `${peso(d)}/day (~${pesoK(perMonth(d))}/mo)`;
@@ -33,12 +34,62 @@ function stepper(val, dec, inc) { const s = el(`<div class="stepper"></div>`); s
 function meter(label, v, max, cls) { const p = clamp(v / max, 0, 1) * 100; return el(`<div class="meter"><small><span>${label}</span><span>${Math.round(v)}${max === 100 ? '' : '/' + Math.round(max)}</span></small><div class="bar ${cls || (p < 35 ? 'r' : p < 60 ? 'w' : '')}"><i style="width:${p}%"></i></div></div>`); }
 
 // ---------- title & setup ----------
+// ---------- settings (for the whole app, not per company) ----------
+const SET = (() => { try { return Object.assign({ sound: true, speed: 1100 }, JSON.parse(lsGet('negosyante:settings') || '{}')); } catch (e) { return { sound: true, speed: 1100 }; } })();
+function saveSettings() { lsSet('negosyante:settings', JSON.stringify(SET)); }
+const closeT = () => { $('modal').classList.add('hide'); UI.scene = null; };
+// ---------- title / main menu ----------
 function showTitle() {
+  UI.auto = false; clearTimeout(UI.timer); $('btnAuto').classList.remove('on');
+  $('modal').classList.add('hide'); UI.scene = null;
   $('app').classList.add('hide'); $('setup').classList.add('hide'); $('title').classList.remove('hide');
-  const s = load(); $('btnContinue').classList.toggle('hide', !s);
+  migrateSaves();
+  const L = slotList(), s = load(), last = s && L.find((x) => x.id === s.slot);
+  const C = $('btnContinue');
+  C.classList.toggle('hide', !s);
+  if (s) C.innerHTML = `▶ Ituloy: ${esc(s.company)}<small>${INDUSTRIES[s.ind].em} ${esc(INDUSTRIES[s.ind].name)} · ${fshortY(s.day)} · Stage ${s.stage || 1}${last ? ' · ' + pesoK(last.cash) : ''}${s.over ? ' · sarado na' : ''}</small>`;
+  $('btnSlots').classList.toggle('hide', !L.length);
+  $('btnSlots').innerHTML = `\u{1F4BC} Mga negosyo ko (${L.length}/${MAX_SLOTS})`;
+  $('titleVer').textContent = `v${typeof APP_VERSION === 'string' ? APP_VERSION : '?'}`;
 }
-$('btnContinue').addEventListener('click', () => { S = load(); if (S) startApp(); });
-$('btnNew').addEventListener('click', () => { if (load()) return askT('Start over? Your saved business will be replaced.', setup); setup(); });
+const fshortY = (d) => `${MONTHS[monthOf(d) - 1]} ${dom(d)}, ${yearOf(d)}`;
+function openSlot(id) { const s = load(id); if (!s) return toast('Hindi mabuksan ang save'); S = s; closeT(); lsSet(SLOT_LAST, id); sfx('open'); startApp(); }
+function slotsScene() {
+  const L = slotList(), nodes = [];
+  if (!L.length) nodes.push(el('<div class="empty">Wala pang saved na negosyo.</div>'));
+  for (const x of L) {
+    const I = INDUSTRIES[x.ind] || { em: '?', name: x.ind };
+    nodes.push(row(`<span class="t">${esc(x.company)}</span><small>${I.em} ${esc(I.name)} · Stage ${x.stage} · ${fshortY(x.day)} · cash ${pesoK(x.cash)}${x.over ? ' · <span class="neg">sarado</span>' : ''}</small>`,
+      btns(btn('Open', () => openSlot(x.id), 'primary'), btn('\u{1F5D1}', () => scene({ em: '\u{1F5D1}', title: `Delete ${esc(x.company)}?`, body: 'This business and all its books will be erased from this phone. Export it first if you want a backup.', choices: [{ label: 'Delete', cls: 'danger', fn: () => { deleteSlot(x.id); sfx('tap'); slotsScene(); showTitle(); } }, { label: 'Cancel', fn: slotsScene }] }), 'danger'))));
+  }
+  scene({ em: '\u{1F4BC}', title: 'Mga negosyo ko', sub: `${L.length} of ${MAX_SLOTS} save slots used`, nodes, choices: [{ label: 'Close', fn: closeT }] });
+}
+function newBusiness() {
+  if (slotList().length >= MAX_SLOTS) { toast(`Max ${MAX_SLOTS} businesses. Delete one first.`); return slotsScene(); }
+  closeT(); setup();
+}
+function settingsScene(inGame) {
+  const back = inGame ? () => menuScene() : closeT;
+  const tog = (on) => (on ? 'ON' : 'OFF');
+  scene({ em: '⚙️', title: 'Settings', sub: `Negosyante PH v${typeof APP_VERSION === 'string' ? APP_VERSION : '?'}`, nodes: [
+    row('<span class="t">Sound effects</span><small>Cash register, notifications, level up</small>', btn(tog(SET.sound), () => { SET.sound = !SET.sound; saveSettings(); sfx('tap'); settingsScene(inGame); }, SET.sound ? 'primary' : '')),
+    row('<span class="t">Auto-play speed</span><small>How fast days pass on Auto</small>', btns(...[['Mabagal', 1800], ['Normal', 1100], ['Mabilis', 500]].map(([l, v]) => btn(l, () => { SET.speed = v; saveSettings(); settingsScene(inGame); }, SET.speed === v ? 'primary' : '')))),
+    row('<span class="t">Backup / transfer</span><small>Move a business to another phone or browser</small>', btns(inGame ? btn('Export', () => exportSave()) : null, btn('Import', () => importSave(inGame))))
+  ], choices: [{ label: inGame ? '← Back' : 'Close', cls: 'primary', fn: back }] });
+}
+function menuScene() {
+  UI.auto = false; clearTimeout(UI.timer); $('btnAuto').classList.remove('on');
+  scene({ em: '⏸️', title: 'Naka-pause', sub: `${esc(S.company)} · ${fdate(S.day)}`, choices: [
+    { label: '▶ Ituloy ang laro', cls: 'primary', fn: closeS },
+    { label: '\u{1F4BE} Save', sub: 'The game also saves every day by itself', fn: () => { toast(save() ? 'Saved' : 'Save failed: storage full'); } },
+    { label: '❓ Paano laruin', fn: howTo },
+    { label: '⚙️ Settings', fn: () => settingsScene(true) },
+    { label: '\u{1F3E0} Main menu', sub: 'Save and switch business', fn: () => { save(); showTitle(); } }] });
+}
+$('btnContinue').addEventListener('click', () => { const s = load(); if (s) { S = s; sfx('open'); startApp(); } });
+$('btnNew').addEventListener('click', () => newBusiness());
+$('btnSlots').addEventListener('click', () => slotsScene());
+$('btnSettings').addEventListener('click', () => settingsScene(false));
 function setup() {
   const st = { step: 0, ind: 'trading', fund: 'angel', company: '', owner: '' };
   $('title').classList.add('hide'); $('setup').classList.remove('hide');
@@ -116,6 +167,7 @@ function tutorial() {
 // ---------- main render ----------
 document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => { UI.tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
 $('btnHelp').addEventListener('click', () => howTo());
+$('btnMenu').addEventListener('click', () => menuScene());
 $('coStage').addEventListener('click', () => stagesScene());
 $('btnNext').addEventListener('click', () => { if (S.over) return gameOverScene(); step(); });
 $('btnAuto').addEventListener('click', () => { UI.auto = !UI.auto; $('btnAuto').classList.toggle('on', UI.auto); if (UI.auto) autoLoop(); });
@@ -124,13 +176,14 @@ function autoLoop() {
   if (!UI.auto) return;
   if (!$('modal').classList.contains('hide') || S.queue.length) { UI.timer = setTimeout(autoLoop, 600); return; }
   step(true);
-  UI.timer = setTimeout(autoLoop, 1100);
+  UI.timer = setTimeout(autoLoop, SET.speed || 1100);
 }
 function step(auto) {
   if (!$('modal').classList.contains('hide')) return;
   const out = nextDay();
   const r = out[out.length - 1];
   if (!auto && r) toast(r.open ? `${fshort(r.d)}: benta ${peso(Math.round(out.reduce((s, x) => s + x.sales, 0)))}` : `${fshort(r.d)}: sarado`);
+  if (!auto && r && r.open && r.sales > 0) sfx(r.sales > 50000 ? 'cash' : 'coin');
   render(); pump();
   if (S.over) gameOverScene();
 }
@@ -282,7 +335,7 @@ function approvalScene(id) {
     for (const x of xs) { const late = x.due < S.day; nodes.push(row(`<span class="t ${late ? 'neg' : ''}">${esc(x.label)}</span><small>${late ? 'OVERDUE, with penalty' : 'Due ' + fdate(x.due)}</small>`, peso(Math.round(voucherAmt(x))))); }
     nodes.push(row('<b>Cash in bank</b>', peso(Math.round(cash()))));
   } else nodes.push(el(`<div class="note">${esc(a.body)}</div>`));
-  const ch = K.choices(a).map((c, i) => ({ label: c.label, sub: c.sub, cls: c.cls, fn: () => { const m = resolveApproval(a.id, i); if (m == null) { closeS(); return; } save(); done(c.label, esc(m), K.em); } }));
+  const ch = K.choices(a).map((c, i) => ({ label: c.label, sub: c.sub, cls: c.cls, fn: () => { sfx(i === 0 ? 'approve' : 'decline'); const m = resolveApproval(a.id, i); if (m == null) { closeS(); return; } save(); done(c.label, esc(m), K.em); } }));
   ch.push({ label: 'Mamaya na', sub: 'Decide later', fn: closeS });
   scene({ em: K.em, title: esc(a.title), sub: esc(a.from), nodes, choices: ch });
 }
@@ -853,9 +906,9 @@ function exportSave() {
   const txt = JSON.stringify(S), ta = el('<textarea readonly></textarea>'); ta.value = txt;
   scene({ em: '\u{1F4BE}', title: 'Export save', body: 'Copy all of this text, then paste it into Import on the other device.', nodes: [ta], choices: [{ label: 'Copy', cls: 'primary', fn: () => { try { navigator.clipboard.writeText(txt).then(() => toast('Copied!'), () => { ta.select(); toast('Select all and copy'); }); } catch (e) { ta.select(); } } }, { label: 'Close', fn: closeS }] });
 }
-function importSave() {
+function importSave(inGame) {
   const ta = el('<textarea placeholder="Paste your save here"></textarea>');
-  scene({ em: '\u{1F4E5}', title: 'Import save', body: 'This replaces the business on this device.', nodes: [ta], choices: [{ label: 'Import', cls: 'primary', fn: () => { try { const s = JSON.parse(ta.value.trim()); if (!s || s.v !== 1 || !INDUSTRIES[s.ind] || !s.gl) throw new Error('bad'); S = s; save(); closeS(); startApp(); toast('Save imported'); } catch (e) { toast('Hindi valid ang save'); } } }, { label: 'Cancel', fn: closeS }] });
+  scene({ em: '\u{1F4E5}', title: 'Import save', body: 'The business is added as a new save slot. Your other businesses stay.', nodes: [ta], choices: [{ label: 'Import', cls: 'primary', fn: () => { try { const s = JSON.parse(ta.value.trim()); if (!validSave(s)) throw new Error('bad'); if (slotList().length >= MAX_SLOTS && !slotList().some((x) => x.id === s.slot)) { toast(`Max ${MAX_SLOTS} businesses. Delete one first.`); return; } if (inGame) save(); s.slot = s.slot || uid(); S = s; if (!save()) throw new Error('full'); closeT(); startApp(); toast('Save imported'); } catch (e) { toast(e.message === 'full' ? 'Puno na ang storage' : 'Hindi valid ang save'); } } }, { label: 'Cancel', fn: () => (inGame ? settingsScene(true) : closeT()) }] });
 }
 function coSettings(V) {
   const C = card('Game');
@@ -863,7 +916,7 @@ function coSettings(V) {
   C.appendChild(btns(btn('Save now', () => { save(); toast('Saved'); }), btn('Main menu', () => { save(); UI.auto = false; showTitle(); })));
   C.appendChild(row('<span class="t">Backup / transfer</span><small>Copy your save to move it to the installed app or another phone.</small>', btns(btn('Export', () => exportSave()), btn('Import', () => importSave()))));
   C.appendChild(el(`<small>Negosyante PH v${typeof APP_VERSION === 'string' ? APP_VERSION : '?'}</small>`));
-  C.appendChild(btns(btn('Start a new business', () => askT('Delete this business and start over?', () => { wipeSave(); setup(); }), 'danger')));
+  C.appendChild(btns(btn('Start another business', () => { save(); showTitle(); newBusiness(); }), btn('Delete this business', () => askT(`Delete ${S.company} and all its books from this phone?`, () => { wipeSave(); S = null; showTitle(); }), 'danger')));
   V.appendChild(C);
 }
 
@@ -876,7 +929,7 @@ function scene(s) {
   if (s.nodes) for (const n of s.nodes) P.appendChild(n);
   if (s.choices) {
     const C = el('<div class="choices"></div>');
-    for (const c of s.choices) { const b = el(`<button type="button" class="${c.cls || ''}">${c.label}${c.sub ? `<small>${c.sub}</small>` : ''}</button>`); b.disabled = !!c.dis; b.addEventListener('click', () => c.fn()); C.appendChild(b); }
+    for (const c of s.choices) { const b = el(`<button type="button" class="${c.cls || ''}">${c.label}${c.sub ? `<small>${c.sub}</small>` : ''}</button>`); b.disabled = !!c.dis; b.addEventListener('click', () => { sfx('tap'); c.fn(); }); C.appendChild(b); }
     P.appendChild(C);
   }
   M.classList.remove('hide'); P.scrollTop = 0;
@@ -888,7 +941,7 @@ function pump() {
   if (!$('modal').classList.contains('hide') || !S || !S.queue.length) return;
   const ev = S.queue.shift(); save();
   const h = HANDLERS[ev.type];
-  if (h) h(ev); else pump();
+  if (h) { sfx(ev.type === 'stage' ? 'stage' : ev.type === 'yearend' ? 'fanfare' : ['case', 'dole', 'birAudit', 'bounce', 'resign'].includes(ev.type) ? 'bad' : 'notify'); h(ev); } else pump();
 }
 const empOf = (id) => S.emps.find((e) => e.id === id);
 const HANDLERS = {
@@ -1076,7 +1129,7 @@ function offerScene(a, rate, countered) {
   const cost = Math.round(rate * 26 * 1.13);
   scene({ em: '\u{1F4DD}', title: `Job offer: ${esc(a.name)}`, sub: `${roleDef(a.role).name} · probationary (6 months)`, nodes: [el(`<div class="note g" style="font-size:15px"><b>${peso(rate)} kada araw \u2248 ${peso(perMonth(rate))} kada buwan</b>\nTake-home after SSS, PhilHealth, Pag-IBIG: about ${peso(Math.round(perMonth(rate) - takeHomeDed(perMonth(rate))))}/month</div>`), stepper(`${peso(rate)}/day`, () => offerScene(a, Math.max(mw, rate - 10), countered), () => offerScene(a, rate + 10, countered)), el(`<div class="note ${rate < a.ask ? 'y' : 'g'}">Asking ${peso(a.ask)}${a.seenFloor && a.floor < a.ask ? ' (said it’s negotiable)' : ''}. Chance they accept now: about ${Math.round(p * 100)}%.\nMonthly cost about ${peso(cost)} with employer contributions and 13th month.${a.prof === 'fresh' || a.prof === 'nowork' ? '\nNo experience: lower skill now, but they learn fast.' : ''}</div>`)],
     choices: [{ label: 'Send the offer', cls: 'primary', fn: () => {
-      if (chance(p)) { const e = hire(a.id, rate); e.morale = clamp(55 + (rate - a.ask) / a.ask * 150 + (e.att - 0.5) * 20, 30, 85); done('Tinanggap!', `${esc(e.name)} starts on ${fdate(e.startOn)} as ${roleDef(e.role).name}.${a.docs ? '' : ' (Completing pre-employment requirements first.)'} Job standards for regularization were explained in the contract.${filledNote(e)}`, '\u{1F91D}'); }
+      if (chance(p)) { const e = hire(a.id, rate); sfx('hire'); e.morale = clamp(55 + (rate - a.ask) / a.ask * 150 + (e.att - 0.5) * 20, 30, 85); done('Tinanggap!', `${esc(e.name)} starts on ${fdate(e.startOn)} as ${roleDef(e.role).name}.${a.docs ? '' : ' (Completing pre-employment requirements first.)'} Job standards for regularization were explained in the contract.${filledNote(e)}`, '\u{1F91D}'); }
       else if (!countered && rate >= a.floor * 0.85) { const c = Math.max(a.floor, Math.round((rate + a.ask) / 2 / 5) * 5); scene({ em: '\u{1F914}', title: 'Counter-offer', body: `"Salamat po sa offer. Pwede po bang ${peso(c)}? ${vr(a, 'ctr', ['May inaalagaan po kasi akong magulang.', 'Pamasahe pa lang po kasi ₱120 na araw-araw.', 'May isa pa po kasing nag-offer sa akin.'])}"`, choices: [{ label: `Sige, ${peso(c)}`, cls: 'primary', fn: () => { a.ask = c; a.floor = c; offerScene(a, c, true); } }, { label: 'Hanggang dito lang kami', fn: () => { if (chance(0.35)) { const e = hire(a.id, rate); done('Pumayag din!', `${esc(e.name)} accepted ${peso(rate)}/day. Starts ${fdate(e.startOn)}.${filledNote(e)}`, '\u{1F91D}'); } else { S.applicants = S.applicants.filter((x) => x !== a); done('Hindi tinanggap', `${esc(a.name)} took the other offer.`, '\u{1F614}'); } } }] }); }
       else { S.applicants = S.applicants.filter((x) => x !== a); done('Hindi tinanggap', `${esc(a.name)}: "${vr(a, 'no', ['Pasensya na po, may mas mataas pong offer sa akin.', 'Hindi po kakayanin ng budget ko, salamat po.', 'Tinanggap ko na po ang trabaho sa mall.'])}"`, '\u{1F614}'); }
     } }, { label: 'Back to the interview', fn: () => interviewScene(a, a.lastAsked || []) }] });
@@ -1242,8 +1295,9 @@ function yearScene(y, browse) {
   scene({ em: '\u{1F4D8}', title: `${y} Annual Report`, sub: esc(S.company), nodes, choices: ch });
 }
 function gameOverScene() {
+  sfx('bad');
   const why = { board: 'The board voted to replace you as President. Tito Ramon shook your hand: "Salamat sa lahat, pero kailangan namin ng bagong direksyon."', insolvent: 'The company ran out of cash for 30 days and could not pay its obligations. The board filed for rehabilitation.' }[S.over] || 'Game over.';
-  scene({ em: '\u{1F3C1}', title: 'Tapos na ang laban', body: `${why}\n\nYou ran ${esc(S.company)} for ${S.day - S.start} days.`, choices: [{ label: 'Start a new business', cls: 'primary', fn: () => { wipeSave(); closeS(); setup(); } }, { label: 'Look at the books one last time', fn: () => { $('modal').classList.add('hide'); } }] });
+  scene({ em: '\u{1F3C1}', title: 'Tapos na ang laban', body: `${why}\n\nYou ran ${esc(S.company)} for ${S.day - S.start} days.`, choices: [{ label: 'Start a new business', cls: 'primary', fn: () => { save(); showTitle(); newBusiness(); } }, { label: 'Look at the books one last time', fn: () => { $('modal').classList.add('hide'); } }] });
 }
 
 // --- mini game: rush hour ---

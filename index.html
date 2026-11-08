@@ -17,6 +17,7 @@
 <div id="app" class="hide">
   <header id="top">
     <div class="co"><b id="coName">Company</b><small id="coDate">Lun, Ene 4, 2027</small><button type="button" id="coStage" class="stagechip">Stage 1</button></div>
+    <button type="button" id="btnMenu" aria-label="Menu">&#9776;</button>
     <button type="button" id="btnHelp" aria-label="How to play">?</button>
     <div class="money"><small>Cash</small><b id="coCash">&#8369;0</b></div>
   </header>
@@ -42,8 +43,11 @@
   </div>
   <div class="stack">
     <button type="button" class="primary big hide" id="btnContinue">Ituloy ang negosyo</button>
-    <button type="button" class="primary big" id="btnNew">Bagong negosyo</button>
+    <button type="button" class="big" id="btnNew">&#10133; Bagong negosyo</button>
+    <button type="button" class="big hide" id="btnSlots">&#128188; Mga negosyo ko</button>
+    <button type="button" class="big ghost" id="btnSettings">&#9881;&#65039; Settings</button>
   </div>
+  <p class="fine" id="titleVer"></p>
   <p class="fine">Labor and tax rules follow Philippine law as of late 2026 (NCR wage order, SSS, PhilHealth, Pag-IBIG, BIR, EOPT Act). Simplified for the game: not legal advice.</p>
 </div>
 
@@ -58,6 +62,7 @@
 <script src="engine.js"></script>
 <script src="features.js"></script>
 <script src="approvals.js"></script>
+<script src="audio.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

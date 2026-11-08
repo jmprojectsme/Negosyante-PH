@@ -192,16 +192,37 @@ function newGame(o) {
   save();
   return S;
 }
-function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* storage full or blocked */ } }
-function load() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY); if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (!s || s.v !== 1 || !INDUSTRIES[s.ind] || !s.gl) return null;
-    return s;
-  } catch (e) { return null; }
+// ---------- save slots: several companies on one phone ----------
+const SLOT_INDEX = 'negosyante:slots', SLOT_LAST = 'negosyante:last', MAX_SLOTS = 6;
+const slotKey = (id) => 'negosyante:slot:' + id;
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) { /* blocked */ } };
+function validSave(s) { return !!(s && s.v === 1 && INDUSTRIES[s.ind] && s.gl); }
+function slotList() { try { const L = JSON.parse(lsGet(SLOT_INDEX) || '[]'); return Array.isArray(L) ? L : []; } catch (e) { return []; } }
+function slotMeta(s) { return { id: s.slot, company: s.company, owner: s.owner, ind: s.ind, day: s.day, cash: Math.round((s.gl && s.gl[1000]) || 0), stage: s.stage || 1, over: s.over || null, saved: Date.now() }; }
+function migrateSaves() {   // v1.x single save -> slot
+  const old = lsGet(SAVE_KEY); if (!old) return;
+  try { const s = JSON.parse(old); if (validSave(s)) { s.slot = s.slot || uid(); if (lsSet(slotKey(s.slot), JSON.stringify(s))) { lsSet(SLOT_INDEX, JSON.stringify([slotMeta(s)].concat(slotList().filter((x) => x.id !== s.slot)))); if (!lsGet(SLOT_LAST)) lsSet(SLOT_LAST, s.slot); } } } catch (e) { /* bad old save */ }
+  lsDel(SAVE_KEY);
 }
-
+function save() {
+  if (!S) return false;
+  S.slot = S.slot || uid();
+  if (!lsSet(slotKey(S.slot), JSON.stringify(S))) return false;
+  lsSet(SLOT_INDEX, JSON.stringify([slotMeta(S)].concat(slotList().filter((x) => x.id !== S.slot))));
+  lsSet(SLOT_LAST, S.slot);
+  return true;
+}
+function load(id) {
+  migrateSaves();
+  id = id || lsGet(SLOT_LAST) || (slotList()[0] || {}).id; if (!id) return null;
+  try { const s = JSON.parse(lsGet(slotKey(id)) || 'null'); return validSave(s) ? s : null; } catch (e) { return null; }
+}
+function deleteSlot(id) {
+  lsDel(slotKey(id)); lsSet(SLOT_INDEX, JSON.stringify(slotList().filter((x) => x.id !== id)));
+  if (lsGet(SLOT_LAST) === id) { const n = slotList()[0]; if (n) lsSet(SLOT_LAST, n.id); else lsDel(SLOT_LAST); }
+}
 function inbox(from, title, body, act) { S.inbox.unshift({ id: uid(), d: S.day, from, title, body, read: false, act: act || null }); if (S.inbox.length > 120) S.inbox.length = 120; }
 function queue(ev) { ev.id = ev.id || uid(); S.queue.push(ev); }
 
